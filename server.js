@@ -50,7 +50,7 @@ const {
 } = require('./db');
 
 // --- Configuration Constants ---
-const PORT = process.env.PORT || 3000;   
+const PORT = process.env.PORT || 3000;
 const APP_URL = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
 const app = express();
 const server = http.createServer(app);
@@ -62,7 +62,7 @@ const io = socketIo(server, {
         methods: ["GET", "POST"]
     }
 });
-const PORT = process.env.PORT || 3000;
+
 const saltRounds = 10;
 
 // --- Nodemailer Configuration ---
@@ -1056,5 +1056,5 @@ io.on('connection', (socket) => {
 
 // --- Start Server ---
 server.listen(PORT, () => {
-    console.log(`Server running on ${APP_URL}`);
+    console.log(`Server running on ${PORT}`);
 });
