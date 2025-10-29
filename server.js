@@ -50,6 +50,7 @@ const {
 } = require('./db');
 
 // --- Configuration Constants ---
+const PORT = process.env.PORT || 3000;   
 const APP_URL = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
 const app = express();
 const server = http.createServer(app);
