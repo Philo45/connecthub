@@ -1,20 +1,34 @@
 // --- db.js (Database Abstraction Layer) ---
 
-const mysql = require('mysql2');
+// NOTE: We must use the promise version of mysql2 and remove dotenv for cloud deployment.
+const mysql = require('mysql2/promise');
 const bcrypt = require('bcrypt');
-require('dotenv').config();
+// Removed: require('dotenv').config(); // Render handles env vars
 
-// Create the connection pool
-const pool = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+    console.error("CRITICAL ERROR: DATABASE_URL environment variable is NOT set.");
+    console.error("Please set the DATABASE_URL secret in your Render dashboard.");
+    process.exit(1);
+}
+
+// Configuration object passed to the connection pool
+const dbConfig = {
+    uri: databaseUrl, // Use the full connection URI provided by Render/Railway
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
-}).promise();
+    queueLimit: 0,
+    connectTimeout: 20000, // Increased timeout for cloud connection stability
+    // CRITICAL: SSL configuration required for secure cloud connections (e.g., Railway)
+    ssl: {
+        rejectUnauthorized: false
+    }
+};
 
+// Create the connection pool
+// This pool is created with the promise API directly via the require.
+const pool = mysql.createPool(dbConfig);
 // --- TABLE CREATION FUNCTION (NEW) ---
 async function createAIChatTable() {
     const query = `
@@ -31,17 +45,21 @@ async function createAIChatTable() {
     console.log("AI Chat Messages table checked/created.");
 }
 
-
 // Initial connection check
 pool.getConnection()
-    .then(async (connection) => { // Made async to use await
-        console.log('Successfully connected to the database! 🚀');
-        await createAIChatTable(); // 🟢 Ensure AI table is created
+    .then(async (connection) => {
+        console.log('✅ Successfully connected to the database! 🚀');
+        await createAIChatTable();
         connection.release();
     })
-    .catch(err => {
-        console.error('Database connection failed:', err.message);
+    .catch(error => {
+        // This log will clearly print the exact connection error (e.g., ETIMEDOUT)
+        console.error("❌ Database connection FAILED. Critical Error details:", error.message);
+        console.error("ACTION REQUIRED: Check your DATABASE_URL value and ensure it is correct.");
+        // Exit the application if the DB connection is essential
+        process.exit(1);
     });
+
 
 
 // --- USER & AUTHENTICATION HELPERS ---
