@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConnectHub Password Reset</title>
+    <style>
+        /* Modern CSS Styling */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f4f7f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 25px;
+            font-weight: 600;
+        }
+
+        label {
+            display: block;
+            text-align: left;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+            font-size: 14px;
+        }
+
+        /* Input and Toggle container */
+        .input-group {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        input[type="password"], input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+            padding-right: 40px; /* Make space for the icon */
+        }
+
+        input[type="password"]:focus, input[type="text"]:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+        }
+
+        /* Show/Hide Button Style */
+        .show-password-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: #999;
+            font-size: 18px;
+            user-select: none;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: green;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+
+        button:hover {
+            background-color: green;
+        }
+
+        button:active {
+            transform: scale(0.99);
+        }
+
+        #message {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .error {
+            color: #c0392b;
+            background-color: #fbecec;
+            border: 1px solid #c0392b;
+        }
+
+        .success {
+            color: #27ae60;
+            background-color: #e9fbe9;
+            border: 1px solid #27ae60;
+        }
+
+        /* Tooltip for Password Requirements */
+        .tooltip-container {
+            position: relative;
+            display: block;
+            width: 100%;
+        }
+
+        .tooltip-text {
+            visibility: hidden;
+            width: 100%;
+            background-color: #333;
+            color: #fff;
+            text-align: left;
+            padding: 10px;
+            border-radius: 6px;
+            position: absolute;
+            z-index: 10;
+            bottom: 100%;
+            left: 0;
+            opacity: 0;
+            transition: opacity 0.3s;
+            margin-bottom: 5px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .tooltip-text.show {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .tooltip-text p {
+            margin: 0;
+        }
+        .tooltip-text .invalid { color: #f99; }
+        .tooltip-text .valid { color: #9f9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ConnectHub Password Reset
+
+
+        </h1>
+
+        <form id="resetForm" action="/reset-password" method="POST">
+            <input type="hidden" id="token" name="token">
+
+            <label for="newPassword">New Password</label>
+            <div class="tooltip-container">
+                <div class="input-group">
+                    <input type="password" id="newPassword" name="newPassword" required placeholder="Enter new password">
+                    <span class="show-password-toggle" data-target="newPassword" title="Show password">👁️</span>
+                </div>
+                <div class="tooltip-text" id="passwordTooltip">
+                    <p>Password must meet all requirements:</p>
+                    <p id="lenCheck" class="invalid">• At least 8 characters</p>
+                    <p id="lowerCheck" class="invalid">• At least one lowercase letter</p>
+                    <p id="upperCheck" class="invalid">• At least one uppercase letter</p>
+                    <p id="numCheck" class="invalid">• At least one number (0-9)</p>
+                    <p id="symCheck" class="invalid">• At least one symbol (!@#$%...)</p>
+                </div>
+            </div>
+
+            <label for="confirmPassword">Confirm New Password</label>
+            <div class="input-group">
+                <input type="password" id="confirmPassword" required placeholder="Confirm new password">
+                <span class="show-password-toggle" data-target="confirmPassword" title="Show password">👁️</span>
+            </div>
+
+            <button type="submit">Reset Password</button>
+
+            <p id="message"></p>
+        </form>
+    </div>
+
+    <script>
+        const validationRules = [
+            { id: 'lenCheck', regex: /.{8,}/, error: "Password must be at least 8 characters long." },
+            { id: 'lowerCheck', regex: /[a-z]/, error: "Password must contain at least one lowercase letter." },
+            { id: 'upperCheck', regex: /[A-Z]/, error: "Password must contain at least one uppercase letter." },
+            { id: 'numCheck', regex: /[0-9]/, error: "Password must contain at least one number." },
+            { id: 'symCheck', regex: /[^a-zA-Z0-9]/, error: "Password must contain at least one symbol (e.g., !, @, #)." }
+        ];
+
+        function validatePassword(password) {
+            let errors = [];
+            validationRules.forEach(rule => {
+                if (!rule.regex.test(password)) {
+                    errors.push(rule.error);
+                }
+            });
+            return errors.length > 0 ? errors[0] : null;
+        }
+
+        function updateTooltip(password) {
+            validationRules.forEach(rule => {
+                const element = document.getElementById(rule.id);
+                if (element) {
+                    if (rule.regex.test(password)) {
+                        element.classList.remove('invalid');
+                        element.classList.add('valid');
+                    } else {
+                        element.classList.remove('valid');
+                        element.classList.add('invalid');
+                    }
+                }
+            });
+        }
+
+        // Function to handle redirection (UPDATED TO REDIRECT TO /)
+        function redirectToHome(message) {
+            messageElement.classList.add('success');
+            messageElement.textContent = message + ' Redirecting to login page...';
+
+            // Redirects to the root URL, which serves index.html
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 2000);
+        }
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('resetForm');
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            const tokenInput = document.getElementById('token');
+            const newPasswordInput = document.getElementById('newPassword');
+            const confirmPasswordInput = document.getElementById('confirmPassword');
+            const messageElement = document.getElementById('message');
+            const tooltip = document.getElementById('passwordTooltip');
+
+            // --- Password Toggle Logic ---
+            document.querySelectorAll('.show-password-toggle').forEach(toggle => {
+                toggle.addEventListener('click', () => {
+                    const targetId = toggle.getAttribute('data-target');
+                    const targetInput = document.getElementById(targetId);
+
+                    if (targetInput.type === 'password') {
+                        targetInput.type = 'text';
+                        toggle.textContent = '🙈';
+                        toggle.title = 'Hide password';
+                    } else {
+                        targetInput.type = 'password';
+                        toggle.textContent = '👁️';
+                        toggle.title = 'Show password';
+                    }
+                });
+            });
+
+            // --- Tooltip & Validation Logic ---
+            newPasswordInput.addEventListener('focus', () => {
+                tooltip.classList.add('show');
+            });
+            newPasswordInput.addEventListener('blur', () => {
+                tooltip.classList.remove('show');
+            });
+            newPasswordInput.addEventListener('input', (e) => {
+                updateTooltip(e.target.value);
+            });
+
+
+            if (token) {
+                tokenInput.value = token;
+            } else {
+                messageElement.classList.add('error');
+                messageElement.textContent = 'Error: Missing password reset token. Please restart the reset process.';
+                form.style.display = 'none';
+                return;
+            }
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                messageElement.textContent = '';
+                messageElement.className = '';
+
+                const newPassword = newPasswordInput.value;
+                const confirmPassword = confirmPasswordInput.value;
+
+                // 1. Check for password complexity
+                const validationError = validatePassword(newPassword);
+
+                if (validationError) {
+                    messageElement.classList.add('error');
+                    messageElement.textContent = `Error: ${validationError}`;
+                    return;
+                }
+
+                // 2. Check for password match
+                if (newPassword !== confirmPassword) {
+                    messageElement.classList.add('error');
+                    messageElement.textContent = 'Error: Passwords do not match.';
+                    return;
+                }
+
+                // Disable button and show loading state
+                const submitButton = form.querySelector('button');
+                submitButton.textContent = 'Resetting...';
+                submitButton.disabled = true;
+
+                try {
+                    // Prepare data for the POST request
+                    const data = {
+                        token: token,
+                        newPassword: newPassword
+                    };
+
+                    const response = await fetch('/reset-password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        // SUCCESS: Redirect the user to the root path (index.html)
+                        form.style.display = 'none';
+                        redirectToHome(result.message);
+                    } else {
+                        messageElement.classList.add('error');
+                        messageElement.textContent = result.message || 'Password reset failed.';
+                    }
+                } catch (error) {
+                    messageElement.classList.add('error');
+                    messageElement.textContent = 'An unexpected server error occurred. Please try again.';
+                } finally {
+                    submitButton.textContent = 'Reset Password';
+                    submitButton.disabled = false;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

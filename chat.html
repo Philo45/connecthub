@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConnectHub - Private Chat & Groups</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="icons/favicon.ico" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #4CAF50; /* Green - Used for App branding/buttons */
+            --secondary-color: #388E3C; /* Darker Green */
+            --background-color: #f7f9fc;
+        }
+        /* FIX: Enforce full height and hide body scroll */
+        html { height: 100%; }
+        body {
+            height: 100%;
+            overflow: hidden; /* Prevents the whole body from scrolling */
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background-color);
+            margin: 0;
+        }
+
+        /* Custom scrollbar for chat history */
+        #chat-history::-webkit-scrollbar { width: 6px; }
+        #chat-history::-webkit-scrollbar-thumb {
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+        }
+
+        /* --- CHAT ALIGNMENT FIX START (Original logic is robust) --- */
+
+        /* Message container for alignment (used by the loop) */
+        .message-container {
+            display: flex; /* Enables flexbox alignment */
+            margin-bottom: 10px;
+        }
+
+        /* Styles for messages sent by the current user (Pushes to the right) */
+        .message-container.sent {
+            justify-content: flex-end;
+        }
+
+        /* Styles for messages received from the other user (Keeps to the left) */
+        .message-container.received {
+            justify-content: flex-start;
+        }
+
+        /* Styles for the message bubble itself */
+        .message-bubble {
+            max-width: 60%; /* Limits bubble width */
+            padding: 10px 14px;
+            border-radius: 18px;
+            word-wrap: break-word;
+            line-height: 1.4;
+            box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08); /* Subtle shadow */
+        }
+
+        /* SENT (My) Message Bubble Style */
+        .message-container.sent .message-bubble {
+            background-color: var(--primary-color); /* Primary color bubble */
+            color: white;
+            /* Curved corners for sent messages */
+            border-bottom-right-radius: 4px;
+        }
+
+        /* RECEIVED (Other) Message Bubble Style */
+        .message-container.received .message-bubble {
+            background-color: #ffffff; /* White/light gray bubble */
+            color: #374151; /* Darker text */
+            /* Curved corners for received messages */
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-time {
+            font-size: 0.65rem;
+            opacity: 0.8;
+            margin-top: 5px;
+            display: block;
+            text-align: right;
+            /* Darker time for received messages for better contrast */
+            color: inherit;
+        }
+
+        /* Ensure time is white on sent messages */
+        .message-container.sent .message-time {
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        /* --- CHAT ALIGNMENT FIX END --- */
+
+        /* === MOBILE/TABLET/LARGE SCREEN OPTIMIZATION FIX START === */
+
+        /* 1. Sidebar Base/Mobile Styles */
+        #user-list-sidebar {
+            transition: width 0.3s ease, min-width 0.3s ease, transform 0.3s ease;
+            transform: translateX(-100%); /* Hidden by default on mobile */
+            position: fixed; top: 0; left: 0; height: 100vh; z-index: 50;
+            width: 100%; min-width: 100%; /* Full screen on mobile */
+            background-color: white; /* Changed from semi-transparent */
+        }
+        /* Mobile: When opened by JS */
+        #user-list-sidebar.open { transform: translateX(0); }
+        /* Hide toggle button on mobile */
+        #sidebar-toggle-button { display: none !important; }
+
+        /* 2. Tablet/Small Desktop (lg: 1024px) Styles */
+        @media (min-width: 1024px) {
+            #user-list-sidebar {
+                position: static; /* No longer fixed */
+                transform: translateX(0); /* Always visible */
+                width: 300px; min-width: 300px; /* Fixed width on desktop */
+                box-shadow: none; /* No overlay shadow */
+            }
+            /* Hide mobile open/close buttons on desktop */
+            #sidebar-open-mobile, #sidebar-close-mobile { display: none !important; }
+            /* Show desktop toggle button */
+            #sidebar-toggle-button { display: block !important; }
+
+            /* Ensure main content takes remaining space */
+            #chat-main {
+                width: calc(100% - 300px); /* Adjust based on initial sidebar width */
+            }
+        }
+
+        /* 3. Minimized Sidebar (Desktop only) */
+        .sidebar-minimized { width: 80px !important; min-width: 80px !important; }
+        .sidebar-minimized .user-name, .sidebar-minimized .app-logo,
+        .sidebar-minimized .nav-links, .sidebar-minimized .unread-badge,
+        .sidebar-minimized .tab-selector, .sidebar-minimized .member-info { display: none; }
+        .sidebar-minimized .user-avatar { margin: 0 auto; }
+        .sidebar-minimized .user-item { padding-left: 0 !important; text-align: center; }
+        .sidebar-minimized .user-item .flex { justify-content: center !important; }
+        .sidebar-minimized .user-item .status-wrapper { margin: 0 !important; }
+        .sidebar-minimized #sidebar-toggle-button i { transform: rotate(180deg); }
+
+        /* 4. Chat Header Mobile Fix: Move recipient name to left on mobile */
+        @media (max-width: 1023px) {
+            #chat-header > div.flex {
+                width: 100%;
+            }
+            #recipient-name {
+                flex-grow: 1; /* Allows name to take space */
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            #add-member-btn {
+                flex-shrink: 0; /* Prevents button from shrinking */
+            }
+        }
+        /* === MOBILE/TABLET/LARGE SCREEN OPTIMIZATION FIX END === */
+
+        /* Custom Tab Styling */
+        .tab-button.active {
+            border-bottom: 2px solid var(--primary-color);
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+        .create-group-button {
+            transition: transform 0.2s;
+        }
+        .create-group-button:hover {
+            transform: scale(1.1);
+        }
+
+        /* Custom Toast Styles */
+        .toast-enter-active, .toast-leave-active { transition: opacity 0.3s, transform 0.3s; }
+        .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(20px); }
+
+        /* NEW: File Picker Modal Styles */
+        .file-picker-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border-radius: 8px;
+            transition: background-color 0.15s;
+        }
+        .file-picker-item:hover {
+            background-color: #f3f4f6;
+        }
+
+        /* File bubble styling */
+        .file-bubble {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-radius: 12px;
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+        .message-container.sent .file-bubble {
+            background-color: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .message-container.received .file-bubble {
+            background-color: #f0f4f8;
+            border: 1px solid #e0e6ec;
+        }
+        .file-icon {
+            font-size: 24px;
+            margin-right: 10px;
+            color: var(--primary-color);
+        }
+        .message-container.sent .file-icon {
+            color: #ffffff;
+        }
+        .file-info a {
+            font-weight: 600;
+            text-decoration: underline;
+        }
+
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <div id="create-group-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-[120] flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h3 class="text-2xl font-bold mb-4 text-gray-800 border-b pb-2">Create New Group</h3>
+            <p class="text-sm text-gray-500 mb-4">You will be the administrator of this group. You can optionally invite other users now.</p>
+
+            <form id="create-group-form">
+                <div class="mb-4">
+                    <label for="group-name" class="block text-sm font-medium text-gray-700 mb-1">Group Name</label>
+                    <input type="text" id="group-name" required
+                           class="w-full p-2 border border-gray-300 rounded-lg focus:ring-primary-color focus:border-primary-color transition duration-150"
+                           placeholder="e.g., Project Connect Team">
+                </div>
+                <div class="mb-6">
+                    <label for="group-invites" class="block text-sm font-medium text-gray-700 mb-1">Invite Users (Comma-separated usernames)</label>
+                    <input type="text" id="group-invites"
+                           class="w-full p-2 border border-gray-300 rounded-lg focus:ring-primary-color focus:border-primary-color transition duration-150"
+                           placeholder="userA, userB, userC">
+                    <p class="text-xs text-gray-500 mt-1">Users will be added immediately.</p>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="document.getElementById('create-group-modal').classList.add('hidden')"
+                            class="px-4 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition duration-150">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 bg-primary-color text-white font-semibold rounded-lg hover:bg-secondary-color transition duration-150"
+                            style="background-color: var(--primary-color);">
+                        Create Group
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="add-member-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-[120] flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h3 class="text-2xl font-bold mb-4 text-gray-800 border-b pb-2">Add Members to <span id="add-member-group-name" class="text-primary-color"></span></h3>
+            <p class="text-sm text-gray-500 mb-4">Enter the usernames of the users you wish to add.</p>
+
+            <form id="add-member-form">
+                <div class="mb-6">
+                    <label for="new-members-input" class="block text-sm font-medium text-gray-700 mb-1">Usernames (Comma-separated)</label>
+                    <input type="text" id="new-members-input" required
+                           class="w-full p-2 border border-gray-300 rounded-lg focus:ring-primary-color focus:border-primary-color transition duration-150"
+                           placeholder="userD, userE, userF">
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="document.getElementById('add-member-modal').classList.add('hidden')"
+                            class="px-4 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition duration-150">
+                        Cancel
+                    </button>
+                    <button type="submit" id="submit-add-members"
+                            class="px-4 py-2 bg-primary-color text-white font-semibold rounded-lg hover:bg-secondary-color transition duration-150"
+                            style="background-color: var(--primary-color);">
+                        Add Members
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="file-picker-container" class="absolute bottom-20 lg:right-28 right-4 bg-white border border-gray-200 rounded-xl shadow-2xl p-4 w-60 z-30 hidden">
+        <h4 class="text-sm font-semibold text-gray-600 mb-2 border-b pb-1">Send File</h4>
+        <div class="space-y-1">
+            <label class="file-picker-item cursor-pointer text-gray-700">
+                <i class="fa fa-image text-xl mr-3 text-blue-500"></i>
+                <span class="font-medium">Image (All Types)</span>
+                <input type="file" id="file-input-image" accept="image/*" class="hidden" onchange="uploadFileAndSendMessage(event)">
+            </label>
+            <label class="file-picker-item cursor-pointer text-gray-700">
+                <i class="fa fa-file-alt text-xl mr-3 text-green-500"></i>
+                <span class="font-medium">Document</span>
+                <input type="file" id="file-input-document" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" class="hidden" onchange="uploadFileAndSendMessage(event)">
+            </label>
+            <label class="file-picker-item cursor-pointer text-gray-700">
+                <i class="fa fa-video text-xl mr-3 text-red-500"></i>
+                <span class="font-medium">Video</span>
+                <input type="file" id="file-input-video" accept="video/*" class="hidden" onchange="uploadFileAndSendMessage(event)">
+            </label>
+            <label class="file-picker-item cursor-pointer text-gray-700">
+                <i class="fa fa-volume-up text-xl mr-3 text-purple-500"></i>
+                <span class="font-medium">Audio</span>
+                <input type="file" id="file-input-audio" accept="audio/*" class="hidden" onchange="uploadFileAndSendMessage(event)">
+            </label>
+        </div>
+    </div>
+
+    <div id="emoji-picker-container" class="absolute bottom-20 lg:right-5 right-16 bg-white border border-gray-200 rounded-xl shadow-2xl p-4 w-60 h-80 z-30 hidden">
+        <h4 class="text-sm font-semibold text-gray-600 mb-2 border-b pb-1">Select Emoji</h4>
+        <div id="emoji-list" class="flex flex-wrap gap-2 text-2xl overflow-y-auto h-[calc(100%-30px)]">
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+        </div>
+    </div>
+
+
+    <div id="toast-container" class="fixed bottom-5 right-5 z-[110] space-y-2"></div>
+    <div id="loading-screen" class="fixed inset-0 bg-gray-50 flex items-center justify-center z-[100] transition-opacity duration-500">
+        <div class="text-xl font-semibold text-gray-700">Checking session.</div>
+    </div>
+    <div id="login-redirect" class="hidden fixed inset-0 bg-white z-[101] flex flex-col items-center justify-center p-8">
+        <div class="max-w-md w-full bg-white rounded-xl p-8 shadow-2xl text-center">
+            <i class="fa fa-lock text-5xl text-red-500 mb-4"></i>
+            <h1 class="text-3xl font-bold mb-4 text-gray-800">Access Denied</h1>
+            <p class="text-gray-600 mb-6">You must be logged in to access the private chat. Please log in or sign up.</p>
+            <a href="/" class="px-6 py-3 bg-primary-color hover:bg-secondary-color text-white font-semibold rounded-lg shadow-md transition duration-200" style="background-color: var(--primary-color);">Go to Login Page</a>
+        </div>
+    </div>
+
+    <div id="chat-app" class="flex flex-1 hidden h-full">
+        <div id="user-list-sidebar" class="bg-white border-r border-gray-200 flex-shrink-0 flex flex-col shadow-xl lg:shadow-none h-full">
+            <div class="p-4 flex items-center justify-between border-b border-gray-100">
+                <h1 class="text-2xl font-bold text-primary-color app-logo" style="color: var(--primary-color);">ConnectHub</h1>
+
+                <button id="sidebar-toggle-button" class="hidden lg:block p-2 rounded-full hover:bg-gray-100 transition duration-150 text-gray-600">
+                    <i class="fa fa-bars text-xl"></i>
+                </button>
+                <button id="sidebar-close-mobile" class="lg:hidden p-2 rounded-full hover:bg-gray-100 transition duration-150 text-gray-600">
+                    <i class="fa fa-times text-2xl"></i>
+                </button>
+            </div>
+
+            <div class="p-4 border-b border-gray-100 nav-links">
+                <a href="/" class="block mb-2 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition duration-150">
+                    <i class="fa fa-house w-6"></i> Community Posts
+                </a>
+                <button id="logout-button" class="w-full text-left px-3 py-2 rounded-lg text-red-500 hover:bg-red-50 transition duration-150">
+                    <i class="fa fa-sign-out-alt w-6"></i> Log Out (<span id="current-user-display">...</span>)</button>
+            </div>
+
+            <div id="sidebar-tabs" class="flex border-b border-gray-200 tab-selector">
+                <button id="tab-users" class="tab-button flex-1 p-3 text-sm text-center text-gray-500 hover:bg-gray-50 transition duration-150 active"
+                    onclick="setCurrentView('users')">
+                    <i class="fa fa-user-friends mr-1"></i> Users
+                </button>
+                <button id="tab-groups" class="tab-button flex-1 p-3 text-sm text-center text-gray-500 hover:bg-gray-50 transition duration-150"
+                    onclick="setCurrentView('groups')">
+                    <i class="fa fa-users-rectangle mr-1"></i> Groups
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-2">
+                <div id="sidebar-list-header" class="flex items-center justify-between px-2 py-1 mb-2 border-b">
+                    <p id="sidebar-list-title" class="text-xs text-gray-400 font-semibold uppercase">All Users</p>
+                    <button id="create-group-btn" onclick="showCreateGroupModal()" title="Create New Group"
+                            class="create-group-button text-primary-color hover:text-secondary-color hidden p-1 rounded-full text-lg transition duration-200">
+                        <i class="fa fa-plus"></i>
+                    </button>
+                </div>
+
+                <div id="sidebar-list-container">
+                    <p class="text-center text-gray-500 p-4">Loading content...</p>
+                </div>
+            </div>
+
+        </div>
+
+        <div id="chat-main" class="flex flex-col flex-1 h-full relative">
+            <div id="chat-header" class="bg-white p-4 border-b border-gray-200 shadow-md flex items-center justify-between">
+                <div class="flex items-center flex-1 min-w-0"> <button id="sidebar-open-mobile" class="lg:hidden p-2 rounded-full hover:bg-gray-100 transition duration-150 text-gray-600">
+                        <i class="fa fa-users text-xl"></i>
+                    </button>
+                    <h2 id="recipient-name" class="text-xl font-semibold text-gray-800 ml-3 truncate">Select a user or group to chat</h2>
+                </div>
+
+                <button id="add-member-btn" class="hidden p-2 rounded-full text-primary-color hover:bg-gray-100 transition duration-150 flex-shrink-0"
+                        onclick="showAddMemberModal()" title="Add Members to Group">
+                    <i class="fa fa-user-plus text-xl"></i>
+                </button>
+            </div>
+
+            <div id="chat-history" class="flex-1 overflow-y-auto p-6 space-y-4 bg-background-color">
+                <p class="text-center text-gray-500 text-lg p-10">
+                    <i class="fa fa-comment-dots text-4xl text-gray-300 block mb-2"></i>
+                    Your conversations will appear here.
+                </p>
+            </div>
+
+            <form id="message-form" class="bg-white p-4 border-t border-gray-200 flex items-center">
+                <button type="button" id="emoji-button" onclick="toggleEmojiPicker()"
+                        class="p-3 rounded-full text-gray-500 hover:bg-gray-100 transition duration-150 disabled:opacity-50"
+                        title="Add Emoji" disabled>
+                    <i class="fa-regular fa-face-smile text-xl"></i>
+                </button>
+
+                <button type="button" id="file-button" onclick="toggleFilePicker()"
+                        class="p-3 rounded-full text-gray-500 hover:bg-gray-100 transition duration-150 disabled:opacity-50"
+                        title="Attach File" disabled>
+                    <i class="fa fa-paperclip text-xl"></i>
+                </button>
+
+                <input type="text" id="message-input" placeholder="Type your message..."
+                        class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-primary-color focus:border-primary-color transition duration-150 disabled:bg-gray-100 mx-2"
+                        style="border-color: var(--primary-color);" disabled>
+
+                <button type="submit" id="send-button"
+                            class="ml-2 px-5 py-3 bg-primary-color text-white font-semibold rounded-lg hover:bg-secondary-color transition duration-150 disabled:bg-gray-400"
+                            style="background-color: var(--primary-color);" disabled>
+                    <i class="fa fa-paper-plane"></i>
+                </button>
+            </form>
+
+        </div>
+    </div>
+
+    <script>
+        // --- GLOBAL VARIABLES & INITIALIZATION ---
+        const currentUsername = localStorage.getItem('username'); // Logged in user's username
+        let currentUserId = null; // Logged in user's ID from DB
+        let currentRecipient = null; // Username or ID of the user/group currently chatting with
+
+        let messagePollInterval = null; // Polling handle for message history
+        const POLL_RATE = 2000; // Poll for new messages every 2 seconds
+
+        const loadingScreen = document.getElementById('loading-screen');
+        const loginRedirect = document.getElementById('login-redirect');
+        const chatApp = document.getElementById('chat-app');
+        const currentUserDisplayEl = document.getElementById('current-user-display');
+
+        const chatHistory = document.getElementById('chat-history');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const sidebarListContainer = document.getElementById('sidebar-list-container');
+        const sidebarListTitle = document.getElementById('sidebar-list-title');
+        const createGroupBtn = document.getElementById('create-group-btn');
+        const recipientNameEl = document.getElementById('recipient-name');
+        const toastContainer = document.getElementById('toast-container');
+        const createGroupModal = document.getElementById('create-group-modal');
+
+        const addMemberBtn = document.getElementById('add-member-btn');
+        const addMemberGroupNameEl = document.getElementById('add-member-group-name');
+        const addMemberModal = document.getElementById('add-member-modal');
+
+        // NEW GLOBAL STATE ELEMENTS
+        const emojiPickerContainer = document.getElementById('emoji-picker-container');
+        const filePickerContainer = document.getElementById('file-picker-container');
+        const emojiButton = document.getElementById('emoji-button');
+        const fileButton = document.getElementById('file-button');
+        const messageForm = document.getElementById('message-form');
+
+        let registeredUserList = []; // Full list of all users from the DB
+        let onlineUsernamesList = []; // Array of currently connected usernames (Socket.IO)
+        let unreadCounts = {}; // Map: { username/groupId: count }
+        let groupsList = []; // List of available groups from DB
+        let currentView = 'users'; // 'users' or 'groups'
+
+        // Initialize Socket.IO connection
+        const socket = io();
+
+        // --- NEW FILE & EMOJI UI FUNCTIONS ---
+
+        function toggleEmojiPicker() {
+            // Close file picker if open
+            if (!filePickerContainer.classList.contains('hidden')) {
+                filePickerContainer.classList.add('hidden');
+            }
+            emojiPickerContainer.classList.toggle('hidden');
+        }
+
+        function toggleFilePicker() {
+            // Close emoji picker if open
+            if (!emojiPickerContainer.classList.contains('hidden')) {
+                emojiPickerContainer.classList.add('hidden');
+            }
+            filePickerContainer.classList.toggle('hidden');
+        }
+
+        function insertEmoji(emoji) {
+            const start = messageInput.selectionStart;
+            const end = messageInput.selectionEnd;
+            const value = messageInput.value;
+            // Insert emoji at cursor position
+            messageInput.value = value.substring(0, start) + emoji + value.substring(end);
+            // Move cursor after the inserted emoji
+            messageInput.selectionStart = messageInput.selectionEnd = start + emoji.length;
+            messageInput.focus();
+            // Close the picker immediately
+            emojiPickerContainer.classList.add('hidden');
+        }
+
+        // Disables controls during file upload/send process
+        function toggleControls(disable) {
+            messageInput.disabled = disable;
+            sendButton.disabled = disable;
+            emojiButton.disabled = disable;
+            fileButton.disabled = disable;
+        }
+
+        /**
+ * Handles file selection, uploads the file to the server, and sends the message.
+ * @param {Event} event The change event from the file input.
+ */
+async function uploadFileAndSendMessage(event) {
+    const file = event.target.files[0];
+    filePickerContainer.classList.add('hidden');
+
+   if (!file || !currentRecipient || !currentUsername) {
+    // Check if the variables are falsy (null, undefined, or empty string "")
+    if (!currentUsername) {
+        showToast('You are not logged in. Please log in to send files.', 'error', 5000);
+    } else if (!currentRecipient) {
+        showToast('Please select a recipient before sending a file.', 'error', 5000);
+    } else {
+        // Fallback for file or other issues
+        showToast('Missing file or chat data.', 'error', 5000);
+    }
+    console.error("Attempted file upload with missing context data.");
+    return;
+}
+
+    toggleControls(true);
+    // Use a persistent toast for upload
+    showToast(`Uploading ${file.name}...`, 'info', 0);
+
+    const isGroup = groupsList.some(g => g.group_id.toString() === currentRecipient);
+    const content = messageInput.value.trim() || `[File: ${file.name}]`;
+       console.log('Current Username:', currentUsername);
+       console.log('Current Recipient:', currentRecipient);
+       console.log('Is Group:', isGroup);
+    const formData = new FormData();
+    // ?? CORRECTION/CHECK: The backend server.js uses 'chatFile' or 'file'?
+    // Assuming backend uses 'file' based on your formData.append('file', file)
+    formData.append('file', file);
+    formData.append('username', currentUsername);
+    formData.append('recipientUsernameOrId', currentRecipient);
+    formData.append('isGroup', isGroup.toString());
+    // Render an optimistic file message
+    renderOptimisticMessage(content, file.name, file.type);
+
+    // Clear message input immediately to remove the caption
+    messageInput.value = '';
+
+    try {
+        // 1. Upload the file
+        const uploadResponse = await fetch('/api/upload/file', {
+            method: 'POST',
+            body: formData,
+        });
+
+        // ?? CRITICAL FIX: Check response.ok (200-299 status) before reading the body
+        if (!uploadResponse.ok) {
+             // Handle HTTP status errors gracefully
+            let errorMessage = `Upload failed with status ${uploadResponse.status}.`;
+            try {
+                // Try to parse the error message if the server sent JSON
+                const errorData = await uploadResponse.json();
+                errorMessage = errorData.message || errorMessage;
+            } catch {
+                // If parsing fails (e.g., server returned HTML/text, like the 404 page)
+                errorMessage = `Server error (${uploadResponse.status}). Failed to parse error response.`;
+            }
+            // Throwing the error here exits the try block and jumps to catch
+            throw new Error(errorMessage);
+        }
+
+        // If response is OK, safely parse the JSON
+        const uploadData = await uploadResponse.json();
+
+        if (!uploadData.success || !uploadData.file_id) {
+             // Handle application-level success: false (if status was 200 but logic failed)
+            throw new Error(uploadData.message || 'File upload failed: No file ID returned.');
+        }
+
+        showToast(`File uploaded! Sending message...`, 'success', 3000);
+
+        // 2. Send the message with file metadata via Socket.IO
+        const messagePayload = {
+            from: currentUsername,
+            to: currentRecipient,
+            content: content,
+            fileId: uploadData.file_id,
+            messageType: 'file'
+        };
+
+        if (isGroup) {
+            socket.emit('group:send_message', messagePayload);
+        } else {
+            socket.emit('chat:send_message', messagePayload);
+        }
+
+    } catch (error) {
+        showToast(`File upload failed! ${error.message}`, 'error', 5000);
+
+        // On upload failure, revert optimistic UI
+        const optimisticBubble = chatHistory.querySelector('[data-optimistic="true"]');
+        if (optimisticBubble) optimisticBubble.remove();
+
+    } finally {
+        // This is necessary to allow the user to re-select the same file
+        event.target.value = null;
+        toggleControls(false); // Re-enable controls
+    }
+}
+        // --- UTILITY FUNCTIONS (Unchanged) ---
+
+        function showToast(message, type = 'success', duration = 3000) {
+            const colors = {
+                success: { bg: 'bg-green-500', icon: 'fa-check-circle' },
+                error: { bg: 'bg-red-500', icon: 'fa-times-circle' },
+                info: { bg: 'bg-blue-500', icon: 'fa-info-circle' }
+            };
+            const { bg, icon } = colors[type] || colors.info;
+
+            const toast = document.createElement('div');
+            // Use z-index higher than the chat-app
+            toast.className = `toast-enter-from fixed bottom-5 right-5 max-w-xs w-full p-4 rounded-xl shadow-lg text-white font-semibold flex items-center ${bg}`;
+            toast.innerHTML = `
+                <i class="fa ${icon} text-xl mr-3"></i>
+                <span>${message}</span>
+            `;
+
+            toastContainer.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('toast-enter-from');
+                toast.classList.add('toast-enter-active');
+                toast.style.transform = 'translateY(0)';
+                toast.style.opacity = '1';
+            });
+
+            setTimeout(() => {
+                toast.classList.remove('toast-enter-active');
+                toast.classList.add('toast-leave-active');
+                toast.style.transform = 'translateY(20px)';
+                toast.style.opacity = '0';
+
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
+        /**
+         * Switches the content displayed in the sidebar between users and groups.
+         * @param {string} view 'users' or 'groups'
+         */
+        function setCurrentView(view) {
+            if (currentView === view) return;
+            currentView = view;
+
+            // Update Tab Styling
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${view}`).classList.add('active');
+
+            // Toggle Create Group Button visibility
+            if (view === 'groups') {
+                createGroupBtn.classList.remove('hidden');
+            } else {
+                createGroupBtn.classList.add('hidden');
+            }
+
+            // Re-render the sidebar list based on the new view
+            renderSidebarContent();
+        }
+
+        function showCreateGroupModal() {
+            createGroupModal.classList.remove('hidden');
+            document.getElementById('group-name').focus();
+        }
+
+        function showAddMemberModal() {
+            if (!currentRecipient || addMemberBtn.classList.contains('hidden')) {
+                showToast("Please select a group first.", 'error');
+                return;
+            }
+            addMemberModal.classList.remove('hidden');
+            document.getElementById('new-members-input').focus();
+        }
+
+
+        // --- API INTEGRATION (Unchanged) ---
+
+        async function fetchCurrentUserId(username) {
+            try {
+                const response = await fetch(`/api/user/me?username=${username}`);
+                if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
+                const data = await response.json();
+                if (data.success && data.user_id) {
+                    currentUserId = data.user_id;
+                    return true;
+                } else {
+                    console.error("Could not retrieve user ID:", data.message || 'Missing user_id');
+                    return false;
+                }
+            } catch (error) {
+                console.error("Error fetching user ID:", error);
+                return false;
+            }
+        }
+
+        async function createGroup(groupName, invitedUsernames) {
+            try {
+                const memberUsernames = invitedUserNames.split(',').map(u => u.trim()).filter(u => u.length > 0);
+                if (!memberUsernames.includes(currentUsername)) {
+                    memberUsernames.unshift(currentUsername);
+                }
+
+                const payload = {
+                    groupName: groupName,
+                    creatorUsername: currentUsername,
+                    invitedUsernames: memberUsernames
+                };
+
+                const response = await fetch('/api/groups', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+
+                if (response.ok && (data.group_id || data.groupId)) {
+                    showToast(`Group "${groupName}" created successfully!`, 'success');
+                    fetchGroups();
+                    return true;
+                } else {
+                    showToast(`Failed to create group: ${data.message || 'Unknown error.'}`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                console.error("Network error during group creation:", error);
+                showToast("Network error: Could not connect to the server.", 'error');
+                return false;
+            }
+        }
+
+        async function addMembersToGroup(usernames) {
+            const groupId = currentRecipient;
+            const newMembers = usernames.split(',').map(u => u.trim()).filter(u => u.length > 0);
+            if (newMembers.length === 0) {
+                showToast("Please enter at least one username.", 'error');
+                return false;
+            }
+
+            try {
+                const payload = {
+                    groupId: parseInt(groupId),
+                    adminUsername: currentUsername,
+                    newMemberUsernames: newMembers
+                };
+
+                const response = await fetch('/api/groups/add-members', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showToast(`${newMembers.join(', ')} added to the group!`, 'success');
+                    fetchGroups();
+                    return true;
+                } else {
+                    showToast(`Failed to add members: ${data.message || 'Unknown error.'}`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                console.error("Network error during add members:", error);
+                showToast("Network error: Could not connect to the server.", 'error');
+                return false;
+            }
+        }
+
+        async function fetchRegisteredUsers() {
+            try {
+                const response = await fetch(`/api/users?currentUsername=${currentUsername}`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+
+                if (Array.isArray(data)) {
+                    registeredUserList = data.map(user => ({
+                        ...user,
+                        isOnline: onlineUsernamesList.includes(user.username)
+                    }));
+                } else if (data.success && Array.isArray(data.users)) {
+                    registeredUserList = data.users.map(user => ({
+                        ...user,
+                        isOnline: onlineUsernamesList.includes(user.username)
+                    }));
+                } else {
+                    throw new Error("Unexpected API response format or missing user list.");
+                }
+
+                if (currentView === 'users') renderSidebarContent();
+                console.log("Successfully fetched all registered users.");
+
+            } catch (error) {
+                console.error("Error fetching registered users:", error);
+                if (currentView === 'users') sidebarListContainer.innerHTML = `<p class="text-red-500 p-4">Network error fetching users.</p>`;
+            }
+        }
+
+        async function fetchGroups() {
+            try {
+                const response = await fetch(`/api/groups?username=${currentUsername}`);
+                if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
+                const data = await response.json();
+
+                if (data.success) {
+                    groupsList = data.groups || [];
+                    if (currentView === 'groups') renderSidebarContent();
+                    console.log(`Successfully fetched ${groupsList.length} groups.`);
+                } else {
+                    console.error("API error fetching groups:", data.message);
+                }
+            } catch (error) {
+                console.error("Error fetching groups:", error);
+                if (currentView === 'groups') {
+                     sidebarListContainer.innerHTML = `<p class="text-red-500 p-4">Error loading groups. Ensure the server is running.</p>`;
+                }
+            }
+        }
+
+
+        async function fetchMessages() {
+            if (!currentRecipient) return;
+
+            try {
+                const isGroup = groupsList.some(g => g.group_id.toString() === currentRecipient);
+
+                let apiPath;
+                if (isGroup) {
+                    apiPath = `/api/messages/group/${currentRecipient}?username=${currentUsername}`;
+                } else {
+                    apiPath = `/api/messages/private/${currentRecipient}?username=${currentUsername}`;
+                }
+
+                const response = await fetch(apiPath);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP error! status: ${response.status} - ${errorText.substring(0, 50)}...`);
+                }
+
+                const data = await response.json();
+
+                if (Array.isArray(data)) {
+                    renderMessages(data, isGroup);
+                } else if (data.success && Array.isArray(data.messages)) {
+                    renderMessages(data.messages, isGroup);
+                } else {
+                    const errorMessage = data.message || 'Failed to load chat history.';
+                    chatHistory.innerHTML = `<p class="text-center text-red-500 text-lg p-10">Error: ${errorMessage}</p>`;
+                }
+
+            } catch (error) {
+                console.error("Error updating chat history:", error);
+                chatHistory.innerHTML = `<p class="text-center text-red-500 text-lg p-10">Network Error. Check console for details.</p>`;
+            }
+        }
+
+        async function postMessage(content) {
+            if (content.length === 0 || !currentRecipient) return false;
+
+            const isGroup = groupsList.some(g => g.group_id.toString() === currentRecipient);
+
+            const payload = {
+                from: currentUsername,
+                to: currentRecipient,
+                content: content,
+                // These are null/text for a pure text message
+                fileId: null,
+                messageType: 'text'
+            };
+
+            if (isGroup) {
+                socket.emit('group:send_message', payload);
+                return true;
+            } else if (currentRecipient) {
+                socket.emit('chat:send_message', payload);
+                return true;
+            } else {
+                console.error("Cannot post message: No recipient selected.");
+                showToast("Select a user or group to chat.", 'error');
+                return false;
+            }
+        }
+
+
+        // --- UI RENDERING (UPDATED for files) ---
+
+        /**
+         * Determines the appropriate icon and background for a file based on its MIME type.
+         */
+        function getFileIcon(mimeType) {
+            if (!mimeType) return { icon: 'fa-file', color: 'text-gray-400' };
+
+            if (mimeType.startsWith('image/')) {
+                return { icon: 'fa-image', color: 'text-blue-500' };
+            } else if (mimeType.startsWith('video/')) {
+                return { icon: 'fa-video', color: 'text-red-500' };
+            } else if (mimeType.startsWith('audio/')) {
+                return { icon: 'fa-volume-up', color: 'text-purple-500' };
+            } else if (mimeType.includes('pdf')) {
+                return { icon: 'fa-file-pdf', color: 'text-red-600' };
+            } else if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) {
+                return { icon: 'fa-file-excel', color: 'text-green-600' };
+            } else if (mimeType.includes('document') || mimeType.includes('word') || mimeType.includes('text')) {
+                return { icon: 'fa-file-word', color: 'text-blue-600' };
+            } else {
+                return { icon: 'fa-file-alt', color: 'text-gray-500' };
+            }
+        }
+
+        /**
+         * Renders an optimistic message (file or text) while waiting for server confirmation.
+         */
+        function renderOptimisticMessage(content, filename = null, mimeType = null) {
+            const containerClass = 'message-container sent';
+            const messageClass = 'message-bubble opacity-70';
+            const time = 'Sending...';
+            const isFile = filename && mimeType;
+
+            const initialPrompt = chatHistory.querySelector('.text-center.text-lg.p-10');
+            if (initialPrompt) initialPrompt.remove();
+
+            let messageContentHTML;
+            if (isFile) {
+                const { icon } = getFileIcon(mimeType);
+                messageContentHTML = `
+                    <div class="file-bubble">
+                        <i class="fa ${icon} file-icon"></i>
+                        <div class="file-info text-white">
+                            <p class="truncate">${filename}</p>
+                            ${content.length > 0 && content !== `[File: ${filename}]` ? `<p class="text-xs mt-1 opacity-80">${content}</p>` : ''}
+                        </div>
+                    </div>
+                `;
+            } else {
+                messageContentHTML = `<p>${content}</p>`;
+            }
+
+
+            chatHistory.innerHTML += `
+                <div class="${containerClass}" data-optimistic="true">
+                    <div class="${messageClass}">
+                        ${messageContentHTML}
+                        <span class="message-time">${time}</span>
+                    </div>
+                </div>
+            `;
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        function renderSidebarContent() {
+            sidebarListContainer.innerHTML = '';
+
+            if (currentView === 'users') {
+                sidebarListTitle.textContent = 'All Users';
+                renderUserList();
+            } else if (currentView === 'groups') {
+                sidebarListTitle.textContent = 'My Groups';
+                renderGroupList();
+            }
+        }
+
+        function renderUserList() {
+            const updatedUsers = registeredUserList.map(user => ({
+                ...user,
+                isOnline: onlineUsernamesList.includes(user.username)
+            }));
+
+            const sortedUsers = [...updatedUsers].sort((a, b) => {
+                if (a.isOnline && !b.isOnline) return -1;
+                if (!a.isOnline && b.isOnline) return 1;
+                return a.username.localeCompare(b.username);
+            });
+
+            if (sortedUsers.length === 0) {
+                sidebarListContainer.innerHTML = `<p class="text-center text-gray-500 p-4">No other users registered.</p>`;
+                return;
+            }
+
+            sidebarListContainer.innerHTML = sortedUsers.map(user => {
+                const username = user.username;
+                const isSelected = username === currentRecipient ? 'bg-gray-200' : 'hover:bg-gray-100';
+                const isOnline = user.isOnline;
+                const statusColor = isOnline ? 'bg-green-500' : 'bg-gray-400';
+                const unreadCount = unreadCounts[username] || 0;
+                const badge = unreadCount > 0
+                    ? `<span class="unread-badge ml-auto px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded-full">${unreadCount}</span>`
+                    : `<span class="unread-badge ml-auto w-6"></span>`;
+
+                return `
+                    <div id="user-${username}" data-type="user" data-id="${username}"
+                         class="user-item flex items-center p-3 my-2 cursor-pointer rounded-xl transition duration-150 ${isSelected}">
+
+                        <div class="status-wrapper relative w-10 h-10 flex-shrink-0">
+                            <div class="user-avatar w-full h-full rounded-full bg-blue-500 flex items-center justify-center text-white text-lg font-bold" style="background-color: var(--primary-color);">
+                                ${username[0].toUpperCase()}
+                            </div>
+                            <div class="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${statusColor}"></div>
+                        </div>
+
+                        <span class="user-name ml-3 text-gray-800 font-semibold truncate flex-1">${username}</span>
+                        ${badge}
+                    </div>
+                `;
+            }).join('');
+
+            document.querySelectorAll('.user-item[data-type="user"]').forEach(item => {
+                item.addEventListener('click', () => {
+                    startChat(item.dataset.id, 'user');
+                });
+            });
+        }
+
+        function renderGroupList() {
+            if (groupsList.length === 0) {
+                 sidebarListContainer.innerHTML = `<p class="text-center text-gray-500 p-4">
+                    <i class="fa fa-info-circle mr-2"></i> You haven't joined any groups. Create one with the **'+'** button!
+                </p>`;
+                return;
+            }
+
+            sidebarListContainer.innerHTML = groupsList.map(group => {
+                const groupId = group.group_id.toString();
+                const isSelected = groupId === currentRecipient ? 'bg-gray-200' : 'hover:bg-gray-100';
+                const unreadCount = unreadCounts[groupId] || 0;
+                const badge = unreadCount > 0
+                    ? `<span class="unread-badge ml-auto px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded-full">${unreadCount}</span>`
+                    : `<span class="unread-badge ml-auto w-6"></span>`;
+
+                const memberCountText = group.member_count ? `${group.member_count} members` : '...members';
+                const lastActivity = group.last_activity ? new Date(group.last_activity).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Never';
+
+                return `
+                    <div data-type="group" data-id="${groupId}" data-name="${group.group_name}"
+                         class="user-item flex items-center p-3 my-2 cursor-pointer rounded-xl transition duration-150 ${isSelected}">
+
+                        <div class="status-wrapper relative w-10 h-10 flex-shrink-0">
+                            <div class="user-avatar w-full h-full rounded-full bg-gray-400 flex items-center justify-center text-white text-lg font-bold">
+                                <i class="fa fa-users-rectangle text-sm"></i>
+                            </div>
+                            <div title="${memberCountText}" class="member-info absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white bg-blue-500 flex items-center justify-center text-[8px] text-white">
+                                <i class="fa fa-user-group text-[8px]"></i>
+                            </div>
+                        </div>
+
+                        <div class="ml-3 text-gray-800 flex-1 min-w-0">
+                            <span class="user-name font-semibold truncate block">${group.group_name}</span>
+                            <span class="text-xs text-gray-500 truncate block">${memberCountText} - Last: ${lastActivity}</span>
+                        </div>
+                        ${badge}
+                    </div>
+                `;
+            }).join('');
+
+            document.querySelectorAll('.user-item[data-type="group"]').forEach(item => {
+                item.addEventListener('click', () => {
+                    startChat(item.dataset.id, 'group', item.dataset.name);
+                });
+            });
+        }
+
+        /**
+         * Renders the chat messages, including file attachments.
+         */
+        function renderMessages(messages, isGroup) {
+    const currentId = parseInt(currentUserId);
+    const wasAtBottom = chatHistory.scrollHeight - chatHistory.clientHeight <= chatHistory.scrollTop + 10;
+    chatHistory.innerHTML = '';
+
+    if (messages.length === 0) {
+        chatHistory.innerHTML = `<p class="text-center text-gray-500 text-lg p-10">Start your conversation with ${recipientNameEl.textContent}.</p>`;
+        if (wasAtBottom) chatHistory.scrollTop = chatHistory.scrollHeight;
+        return;
+    }
+
+    messages.forEach(msg => {
+        let isMine;
+        let senderDisplay = '';
+        let senderId;
+
+        if (isGroup) {
+            senderId = parseInt(msg.sender_id);
+            isMine = senderId === currentId;
+
+            if (!isMine && msg.sender_username) {
+                senderDisplay = `<p class="font-bold text-xs mb-1">${msg.sender_username}</p>`;
+            }
+        } else {
+            senderId = parseInt(msg.sender_id);
+            isMine = senderId === currentId;
+        }
+
+        const date = msg.sent_at ? new Date(msg.sent_at) : new Date();
+        const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        const containerClass = isMine ? 'message-container sent' : 'message-container received';
+        const bubbleClass = 'message-bubble';
+        let messageContentHTML = '';
+
+        if (msg.message_type === 'file' && msg.storage_path) {
+            const { icon, color } = getFileIcon(msg.mime_type);
+
+            // ?? CORRECTED FILE LOGIC STARTS HERE
+            // This block handles the correct URL construction and preview logic.
+
+            // Construct the correct PUBLIC URL
+            const fileUrl = `/uploads/${msg.storage_path}`;
+
+            // Logic for image preview
+            let filePreview = '';
+            if (msg.mime_type && msg.mime_type.startsWith('image/')) {
+                // Use the full public URL for the image source
+                filePreview = `<img src="${fileUrl}" alt="${msg.original_filename}" class="max-w-full rounded-lg mb-2 shadow-md" style="max-height: 250px;">`;
+            }
+
+            messageContentHTML = `
+                ${filePreview}
+                <div class="file-bubble">
+                    <i class="fa ${icon} file-icon ${isMine ? 'text-white' : color}"></i>
+                    <div class="file-info ${isMine ? 'text-white' : 'text-gray-700'}">
+                        <a href="${fileUrl}" target="_blank" class="block truncate hover:opacity-80 transition duration-150">
+                            ${msg.original_filename}
+                        </a>
+                        ${msg.content && msg.content !== `[File: ${msg.original_filename}]` ? `<p class="text-xs mt-1 opacity-90">${msg.content}</p>` : ''}
+                    </div>
+                </div>
+            `;
+            // ?? END OF FILE LOGIC
+
+        } else {
+            // Regular text message
+            messageContentHTML = `<p>${msg.content}</p>`;
+        }
+
+        chatHistory.innerHTML += `
+            <div class="${containerClass}">
+                <div class="${bubbleClass}">
+                    ${senderDisplay}
+                    ${messageContentHTML}
+                    <span class="message-time">${time}</span>
+                </div>
+            </div>
+        `;
+    });
+
+    if (wasAtBottom) {
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+}
+
+
+        // --- CHAT MANAGEMENT (Updated to enable/disable new buttons) ---
+
+        function startChat(recipientId, type, recipientName) {
+            if (messagePollInterval) clearInterval(messagePollInterval);
+
+            currentRecipient = recipientId.toString();
+
+            const displayName = type === 'user' ? recipientId : (recipientName || `Group ID: ${recipientId}`);
+            recipientNameEl.textContent = displayName;
+
+            // Enable input and send button
+            toggleControls(false);
+
+            // Toggle visibility of the Add Member button
+            if (type === 'group') {
+                addMemberBtn.classList.remove('hidden');
+                addMemberBtn.dataset.groupId = currentRecipient;
+                addMemberGroupNameEl.textContent = displayName;
+            } else {
+                addMemberBtn.classList.add('hidden');
+            }
+
+            // Close pickers when switching chat
+            emojiPickerContainer.classList.add('hidden');
+            filePickerContainer.classList.add('hidden');
+
+
+            if (unreadCounts[currentRecipient]) {
+                unreadCounts[currentRecipient] = 0;
+            }
+
+            renderSidebarContent();
+
+            messagePollInterval = setInterval(fetchMessages, POLL_RATE);
+            fetchMessages();
+
+            if (window.innerWidth < 1024) {
+                document.getElementById('user-list-sidebar').classList.remove('open');
+            }
+        }
+
+        // --- AUTHENTICATION AND INITIAL SETUP (Unchanged) ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (currentUsername) {
+                currentUserDisplayEl.textContent = currentUsername;
+                loadingScreen.classList.add('hidden');
+                chatApp.classList.remove('hidden');
+
+                const userIdSuccess = await fetchCurrentUserId(currentUsername);
+                if (!userIdSuccess) {
+                    loginRedirect.classList.remove('hidden');
+                    return;
+                }
+
+                socket.emit('user:set_online', currentUsername);
+
+                await fetchGroups();
+                fetchRegisteredUsers();
+
+            } else {
+                loadingScreen.classList.add('hidden');
+                loginRedirect.classList.remove('hidden');
+            }
+
+            setCurrentView('users');
+        });
+
+        // --- EVENT LISTENERS (Updated submit handler) ---
+        document.getElementById('message-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const content = messageInput.value.trim();
+
+    if (!content || !currentRecipient) return;
+
+    toggleControls(true);
+    messageInput.value = '';
+    renderOptimisticMessage(content);
+
+    const success = await postMessage(content);
+
+    // FIX APPLIED HERE: These two lines must be removed.
+    /*
+    const optimisticBubble = chatHistory.querySelector('[data-optimistic="true"]');
+    if (optimisticBubble) optimisticBubble.remove();
+    await fetchMessages();
+    */
+
+    toggleControls(false);
+    messageInput.focus();
+
+    // Also hide pickers on successful send
+    emojiPickerContainer.classList.add('hidden');
+    filePickerContainer.classList.add('hidden');
+});
+        document.getElementById('logout-button').addEventListener('click', logout);
+
+        function logout() {
+            if (messagePollInterval) clearInterval(messagePollInterval);
+            localStorage.removeItem('username');
+            window.location.href = '/';
+        }
+
+        document.getElementById('sidebar-toggle-button').addEventListener('click', () => {
+            // FIX: Ensure chat-main adjusts its width when the sidebar is minimized/expanded
+            const sidebar = document.getElementById('user-list-sidebar');
+            const chatMain = document.getElementById('chat-main');
+
+            sidebar.classList.toggle('sidebar-minimized');
+
+            if (sidebar.classList.contains('sidebar-minimized')) {
+                // Minimized: 80px
+                chatMain.style.width = 'calc(100% - 80px)';
+            } else {
+                // Expanded: 300px (Default desktop width)
+                chatMain.style.width = 'calc(100% - 300px)';
+            }
+        });
+
+        document.getElementById('sidebar-open-mobile').addEventListener('click', () => {
+            document.getElementById('user-list-sidebar').classList.add('open');
+        });
+
+        document.getElementById('sidebar-close-mobile').addEventListener('click', () => {
+            document.getElementById('user-list-sidebar').classList.remove('open');
+        });
+
+        document.getElementById('create-group-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const groupName = document.getElementById('group-name').value.trim();
+            const groupInvites = document.getElementById('group-invites').value.trim();
+
+            if (!groupName) { showToast("Group name is required.", 'error'); return; }
+
+            const formInputs = document.querySelectorAll('#create-group-form input, #create-group-form button');
+            formInputs.forEach(el => el.disabled = true);
+
+            const success = await createGroup(groupName, groupInvites);
+
+            formInputs.forEach(el => el.disabled = false);
+
+            if (success) {
+                createGroupModal.classList.add('hidden');
+                document.getElementById('create-group-form').reset();
+            }
+        });
+
+        document.getElementById('add-member-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const newMembersInput = document.getElementById('new-members-input');
+            const newMembers = newMembersInput.value.trim();
+
+            if (!newMembers) { showToast("Please enter at least one username.", 'error'); return; }
+
+            const formInputs = document.querySelectorAll('#add-member-form input, #add-member-form button');
+            formInputs.forEach(el => el.disabled = true);
+
+            const success = await addMembersToGroup(newMembers);
+
+            formInputs.forEach(el => el.disabled = false);
+
+            if (success) {
+                addMemberModal.classList.add('hidden');
+                document.getElementById('add-member-form').reset();
+            }
+        });
+
+
+        // --- Socket.IO Listener (Unchanged) ---
+        socket.on('users:online:list', (onlineUsernames) => {
+            onlineUsernamesList = onlineUsernames;
+            fetchRegisteredUsers();
+        });
+
+        socket.on('groups:new_group_created', (groupData) => {
+            console.log("New group creation notification received. Refreshing groups.");
+            fetchGroups();
+            showToast(`You were added to new group: ${groupData.groupName}`, 'info', 5000);
+        });
+
+        socket.on('chat:new_message', (data) => {
+            if (data.sender === currentRecipient || data.recipient === currentRecipient) {
+                fetchMessages();
+            } else if (data.recipient === currentUsername) {
+                unreadCounts[data.sender] = (unreadCounts[data.sender] || 0) + 1;
+                showToast(`New private message from ${data.sender}!`, 'info', 4000);
+                renderSidebarContent();
+            }
+        });
+
+        socket.on('group:new_message', (data) => {
+            const groupId = data.groupId.toString();
+
+            if (groupId === currentRecipient) {
+                fetchMessages();
+            } else {
+                unreadCounts[groupId] = (unreadCounts[groupId] || 0) + 1;
+                const group = groupsList.find(g => g.group_id.toString() === groupId) || {group_name: `Group ${groupId}`};
+                showToast(`New message in group "${group.group_name}" from ${data.sender}!`, 'info', 4000);
+                renderSidebarContent();
+            }
+        });
+    </script>
+</body>
+</html>

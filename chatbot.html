@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ConnectHub AI Chat</title>
+     <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="icons/favicon.ico" type="image/x-icon">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #4CAF50; /* Green */
+            --secondary-color: #388E3C; /* Darker Green */
+        }
+        /* CRITICAL: Ensure full viewport height/width and prevent body scroll for app feel */
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden; /* Hide main body scrollbar */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fc;
+        }
+        .bg-primary { background-color: var(--primary-color); }
+        .hover\:bg-secondary:hover { background-color: var(--secondary-color); }
+        .focus\:ring-primary:focus { --tw-ring-color: var(--primary-color); }
+        .focus\:border-primary:focus { border-color: var(--primary-color); }
+
+        /* Custom scrollbar for chat window */
+        #chat-window::-webkit-scrollbar {
+            width: 6px;
+        }
+        #chat-window::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        /* Message Styles */
+        .user-message {
+            background-color: #e0f7e9; /* Light green */
+            align-self: flex-end;
+            margin-left: auto; /* Push user message to the right */
+        }
+        .ai-message {
+            background-color: #ffffff; /* White */
+            align-self: flex-start;
+            border: 1px solid #e2e8f0;
+            margin-right: auto; /* Keep AI message on the left */
+        }
+        .ai-message p {
+            white-space: pre-wrap; /* Preserve formatting for AI code/lists */
+        }
+        /* Style for code blocks within AI responses */
+        .ai-message code {
+            background-color: #f7fafc;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-family: monospace;
+        }
+
+        /* Loading Spinner */
+        .loading-dot {
+            animation: bounce 0.6s infinite alternate;
+        }
+        .loading-dot:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes bounce {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-3px); }
+        }
+
+        /* NEW: Responsive container for mobile takeover */
+        #chatbot-app {
+            width: 100vw;
+            height: 100vh;
+            /* On larger screens, center it with max-width */
+            margin: 0 auto;
+            max-width: 100%;
+        }
+        @media (min-width: 768px) {
+            #chatbot-app {
+                max-width: 672px; /* max-w-3xl is 48rem/768px, using 768px for clarity */
+                height: 90vh; /* make it slightly smaller on desktop */
+                margin-top: 5vh;
+                margin-bottom: 5vh;
+                border-radius: 16px; /* rounded-xl */
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); /* shadow-2xl */
+            }
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen">
+    <div id="chatbot-app" class="flex flex-col bg-white shadow-2xl overflow-hidden">
+
+        <header class="bg-primary p-4 flex items-center justify-between shadow-md flex-shrink-0">
+            <div class="flex items-center">
+                <a href="/" class="text-white hover:text-gray-200 transition duration-150 p-1 mr-3">
+                    <i class="fa fa-arrow-left text-lg"></i>
+                </a>
+                <i class="fa fa-robot text-white text-xl mr-3"></i>
+                <h1 class="text-xl font-semibold text-white">ConnctHub AI</h1>
+            </div>
+            <button id="logout-button" class="text-white text-sm font-medium hover:text-gray-200 p-2 rounded-full" title="Logout">
+                <i class="fa fa-sign-out-alt text-lg"></i>
+            </button>
+        </header>
+
+        <main id="chat-window" class="flex-1 p-4 overflow-y-auto space-y-4 flex flex-col mb-[75px]"></main>
+
+        <div id="loading-indicator" class="hidden p-3 bg-gray-50 border-t border-gray-200 flex items-center flex-shrink-0">
+            <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-3">
+                <i class="fa fa-robot text-primary text-sm"></i>
+            </div>
+            <div class="flex space-x-1">
+                <span class="loading-dot w-2 h-2 bg-gray-500 rounded-full"></span>
+                <span class="loading-dot w-2 h-2 bg-gray-500 rounded-full"></span>
+                <span class="loading-dot w-2 h-2 bg-gray-500 rounded-full"></span>
+            </div>
+        </div>
+
+        <div id="input-container" class="fixed inset-x-0 bottom-0 z-10 p-3 bg-white border-t border-gray-200 w-full max-w-3xl mx-auto">
+            <div class="max-w-3xl mx-auto">
+                 <form id="chat-form" class="flex space-x-3">
+                    <textarea id="user-input" rows="1"
+                                class="flex-1 p-3 border border-gray-300 rounded-xl focus:ring-primary focus:border-primary resize-none transition duration-150 text-base"
+                                placeholder="Ask anything..." required></textarea>
+                    <button type="submit" id="send-button"
+                            class="w-12 h-12 flex-shrink-0 bg-primary text-white rounded-full flex items-center justify-center shadow-lg hover:bg-secondary transition duration-200">
+                        <i class="fa fa-paper-plane text-lg"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Core Configuration (No changes to logic, preserving version) ---
+        const loggedInUser = localStorage.getItem('username');
+        if (!loggedInUser) {
+            // Redirect if not logged in
+            window.location.href = '/';
+        }
+
+        // IMPORTANT: Replace this placeholder with your actual Gemini API Key
+        const API_KEY = "AIzaSyCbzIfMfLTCJkksCS-H3w6tViLFzf179nE";
+       const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+
+        let chatHistory = []; // Stores history in Gemini format: [{ role: 'user/model', content: 'text' }]
+        let isAILoading = false;
+
+        // --- DOM Elements ---
+        const chatWindow = document.getElementById('chat-window');
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        // NEW: Get the input container to correctly size the chat window margin
+        const inputContainer = document.getElementById('input-container');
+
+        // --- Utility Functions ---
+
+        function showMessage(message, type = 'info') {
+            const messageBox = document.createElement('div');
+            const colorMap = {
+                success: 'bg-green-500',
+                error: 'bg-red-500',
+                info: 'bg-blue-500'
+            };
+            const { bg } = colorMap[type] || colorMap.info;
+
+            // Updated positioning for better mobile visibility
+            messageBox.className = `fixed top-12 left-1/2 -translate-x-1/2 p-3 rounded-lg text-white font-semibold shadow-xl ${bg} z-50 transition-all duration-300 transform-gpu`;
+            messageBox.textContent = message;
+
+            document.body.appendChild(messageBox);
+            // Hide after 5 seconds
+            setTimeout(() => {
+                messageBox.style.opacity = '0';
+                messageBox.style.transform = 'translate(-50%, -20px)';
+                setTimeout(() => messageBox.remove(), 300);
+            }, 5000);
+        }
+
+        function scrollToBottom() {
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+       function appendMessage(message) {
+    const messageElement = document.createElement('div');
+
+    // CRITICAL FIX: Ensure message.content is not null/undefined before rendering
+    // Use an empty string if content is missing, which prevents 'undefined' from displaying.
+    const messageContent = message.content || '';
+
+    messageElement.classList.add('flex', 'max-w-[85%]', 'p-3', 'rounded-xl', 'shadow-sm', 'break-words');
+
+    if (message.type === 'user' || message.role === 'user') {
+        messageElement.classList.add('user-message');
+        // Use the safely-checked messageContent variable
+        messageElement.innerHTML = `<p class="text-sm font-medium">${messageContent}</p>`;
+    } else if (message.type === 'model' || message.role === 'model') {
+        messageElement.classList.add('ai-message');
+        // Use innerHTML for AI messages to render potential Markdown/code blocks
+        messageElement.innerHTML = `<div class="flex items-start"><i class="fa fa-robot text-primary text-md mr-3 flex-shrink-0 mt-1"></i><p class="text-sm text-gray-800">${messageContent}</p></div>`;
+    }
+
+    chatWindow.appendChild(messageElement);
+    scrollToBottom();
+}
+        // --- Chat Persistence Functions (Using Express Endpoints) ---
+
+       async function loadHistory() {
+    try {
+        const response = await fetch(`/api/ai-chat/history?username=${loggedInUser}`);
+        if (!response.ok) throw new Error('Failed to fetch history');
+
+        const data = await response.json();
+
+        if (data.success && Array.isArray(data.history)) {
+
+            chatHistory = data.history.map(msg => ({
+                role: msg.role,
+                // CRITICAL FIX: Extract the text from the 'parts' array
+                content: (msg.parts && msg.parts.length > 0) ? msg.parts[0].text : ''
+            }));
+
+            // Render existing history
+            chatHistory.forEach(msg => appendMessage(msg));
+        }
+    } catch (error) {
+        console.error('Error loading history:', error);
+        showMessage('Failed to load previous chat history.', 'error');
+    }
+
+    // Show welcome message only if history is empty
+    if (chatHistory.length === 0) {
+        showWelcomeMessage();
+    }
+}
+
+        async function saveExchange(userMessage, aiResponse) {
+            try {
+                await fetch('/api/ai-chat/message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: loggedInUser,
+                        userMessage: userMessage,
+                        aiResponse: aiResponse
+                    })
+                });
+            } catch (error) {
+                console.error('Error saving chat exchange:', error);
+                // Non-critical error, do not block the user, but log it.
+            }
+        }
+
+        // --- Chat Logic ---
+
+        function showWelcomeMessage() {
+            const welcomeMessage = {
+                type: 'model',
+                content: `Hello ${loggedInUser}! I'm the ConnectHub AI Assistant. I can help you with questions about your social network, community rules, or general topics. How can I assist you today?`
+            };
+            appendMessage(welcomeMessage);
+        }
+
+        async function sendMessageToAI(prompt) {
+            if (isAILoading || !prompt) return;
+
+            isAILoading = true;
+            loadingIndicator.classList.remove('hidden');
+            sendButton.disabled = true;
+
+            try {
+                // Add user message to history
+                const userMessage = { role: 'user', content: prompt, type: 'user' };
+                chatHistory.push(userMessage);
+
+                // Gemini API expects the entire history, converted to its parts format
+                const geminiHistory = chatHistory.map(msg => ({
+                    role: msg.role,
+                    parts: [{ text: msg.content }]
+                }));
+
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: geminiHistory,
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`AI API failed: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                const aiResponseContent = data.candidates[0].content.parts[0].text;
+
+                // Add AI response to history and append to UI
+                const aiMessage = { role: 'model', content: aiResponseContent, type: 'model' };
+                chatHistory.push(aiMessage);
+                appendMessage(aiMessage);
+
+                // Save the full exchange to the server
+                await saveExchange(prompt, aiResponseContent);
+
+            } catch (error) {
+                console.error('AI Error:', error);
+                const errorMessage = {
+                    type: 'model',
+                    content: 'Sorry, I encountered an error while trying to respond. Please check the API key and server connection.'
+                };
+                appendMessage(errorMessage);
+            } finally {
+                isAILoading = false;
+                loadingIndicator.classList.add('hidden');
+                sendButton.disabled = false;
+            }
+        }
+
+        // --- Event Listeners ---
+
+        // Event Listener for chat form submission
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const prompt = userInput.value.trim();
+            userInput.value = ''; // Clear input immediately
+            userInput.style.height = 'auto'; // Reset textarea height
+
+            if (!prompt) return;
+
+            appendMessage({ type: 'user', content: prompt });
+            await sendMessageToAI(prompt);
+        });
+
+        // Auto-resize textarea
+        userInput.addEventListener('input', () => {
+            // Recalculate margin for chat window when input grows
+            const currentHeight = inputContainer.offsetHeight;
+            chatWindow.style.marginBottom = `${currentHeight}px`;
+
+            userInput.style.height = 'auto';
+            userInput.style.height = userInput.scrollHeight + 'px';
+        });
+
+        // Initial setup for the margin on load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadHistory();
+            const currentHeight = inputContainer.offsetHeight;
+            chatWindow.style.marginBottom = `${currentHeight}px`;
+        });
+
+        // Logout Button
+        document.getElementById('logout-button').addEventListener('click', () => {
+             localStorage.removeItem('username');
+             // Redirect to the login page
+             window.location.href = '/';
+        });
+    </script>
+</body>
+</html>

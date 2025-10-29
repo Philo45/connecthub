@@ -1,0 +1,27 @@
+{
+  "name": "ConnectHub Chat",
+  "short_name": "ConnectHub",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f9fc",
+  "theme_color": "#4CAF50",
+  "description": "Secure private chat and community posting web application.",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 48x48 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/icons/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon.png",
+      "sizes": "200x200",
+      "type": "image/png"
+    }
+  ]
+}
