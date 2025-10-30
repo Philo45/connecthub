@@ -75,6 +75,30 @@
             100% { transform: translateY(-3px); }
         }
 
+        /* NEW: Typing Indicator for the message bubble */
+        .typing-indicator {
+            background-color: #f0f4f8; /* Light blue/gray for distinct loading state */
+            align-self: flex-start;
+            border: 1px solid #e2e8f0;
+            margin-right: auto;
+        }
+        .typing-dot-bubble {
+            width: 8px;
+            height: 8px;
+            margin: 0 2px;
+            background-color: #64748b; /* Slate gray */
+            border-radius: 50%;
+            display: inline-block;
+            animation: dot-pulse 1.2s infinite ease-in-out;
+        }
+        .typing-dot-bubble:nth-child(2) { animation-delay: 0.4s; }
+        .typing-dot-bubble:nth-child(3) { animation-delay: 0.8s; }
+
+        @keyframes dot-pulse {
+            0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
         /* NEW: Responsive container for mobile takeover */
         #chatbot-app {
             width: 100vw;
@@ -93,10 +117,24 @@
                 box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); /* shadow-2xl */
             }
         }
+
+        /* FIX: Ensure input container is absolutely positioned relative to the parent #chatbot-app */
+        #input-container {
+            position: absolute; /* Changed from fixed */
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+        /* FIX: On desktop, the input container must respect the max-width of the #chatbot-app */
+        @media (min-width: 768px) {
+            #input-container {
+                width: 100%; /* Fill the parent width */
+            }
+        }
     </style>
 </head>
 <body class="flex flex-col h-screen">
-    <div id="chatbot-app" class="flex flex-col bg-white shadow-2xl overflow-hidden">
+    <div id="chatbot-app" class="flex flex-col bg-white shadow-2xl overflow-hidden relative">
 
         <header class="bg-primary p-4 flex items-center justify-between shadow-md flex-shrink-0">
             <div class="flex items-center">
@@ -111,7 +149,7 @@
             </button>
         </header>
 
-        <main id="chat-window" class="flex-1 p-4 overflow-y-auto space-y-4 flex flex-col mb-[75px]"></main>
+        <main id="chat-window" class="flex-1 p-4 overflow-y-auto space-y-4 flex flex-col"></main>
 
         <div id="loading-indicator" class="hidden p-3 bg-gray-50 border-t border-gray-200 flex items-center flex-shrink-0">
             <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-3">
@@ -124,7 +162,7 @@
             </div>
         </div>
 
-        <div id="input-container" class="fixed inset-x-0 bottom-0 z-10 p-3 bg-white border-t border-gray-200 w-full max-w-3xl mx-auto">
+        <div id="input-container" class="p-3 bg-white border-t border-gray-200">
             <div class="max-w-3xl mx-auto">
                  <form id="chat-form" class="flex space-x-3">
                     <textarea id="user-input" rows="1"
@@ -141,18 +179,16 @@
     </div>
 
     <script>
-        // --- Core Configuration (No changes to logic, preserving version) ---
+        // --- Core Configuration ---
         const loggedInUser = localStorage.getItem('username');
         if (!loggedInUser) {
-            // Redirect if not logged in
             window.location.href = '/';
         }
 
-        // IMPORTANT: Replace this placeholder with your actual Gemini API Key
-        const API_KEY = "AIzaSyCbzIfMfLTCJkksCS-H3w6tViLFzf179nE";
-       const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+        // Configuration for the server-side proxy
+        const CHAT_PROXY_URL = '/api/chat-proxy';
 
-        let chatHistory = []; // Stores history in Gemini format: [{ role: 'user/model', content: 'text' }]
+        let chatHistory = [];
         let isAILoading = false;
 
         // --- DOM Elements ---
@@ -161,7 +197,6 @@
         const userInput = document.getElementById('user-input');
         const sendButton = document.getElementById('send-button');
         const loadingIndicator = document.getElementById('loading-indicator');
-        // NEW: Get the input container to correctly size the chat window margin
         const inputContainer = document.getElementById('input-container');
 
         // --- Utility Functions ---
@@ -173,10 +208,9 @@
                 error: 'bg-red-500',
                 info: 'bg-blue-500'
             };
-            const { bg } = colorMap[type] || colorMap.info;
+            const bgClass = colorMap[type] || colorMap.info;
 
-            // Updated positioning for better mobile visibility
-            messageBox.className = `fixed top-12 left-1/2 -translate-x-1/2 p-3 rounded-lg text-white font-semibold shadow-xl ${bg} z-50 transition-all duration-300 transform-gpu`;
+            messageBox.className = `fixed top-12 left-1/2 -translate-x-1/2 p-3 rounded-lg text-white font-semibold shadow-xl ${bgClass} z-50 transition-all duration-300 transform-gpu`;
             messageBox.textContent = message;
 
             document.body.appendChild(messageBox);
@@ -192,61 +226,82 @@
             chatWindow.scrollTop = chatWindow.scrollHeight;
         }
 
-       function appendMessage(message) {
-    const messageElement = document.createElement('div');
+        /**
+         * Appends a message to the chat window.
+         * @param {object} message - The message object.
+         * @param {boolean} [isTypingIndicator=false] - If true, displays the typing animation.
+         * @returns {HTMLElement} The created message element.
+         */
+        function appendMessage(message, isTypingIndicator = false) {
+            const messageElement = document.createElement('div');
+            const messageContent = message.content || '';
 
-    // CRITICAL FIX: Ensure message.content is not null/undefined before rendering
-    // Use an empty string if content is missing, which prevents 'undefined' from displaying.
-    const messageContent = message.content || '';
+            messageElement.classList.add('flex', 'max-w-[85%]', 'p-3', 'rounded-xl', 'shadow-sm', 'break-words');
 
-    messageElement.classList.add('flex', 'max-w-[85%]', 'p-3', 'rounded-xl', 'shadow-sm', 'break-words');
+            if (message.type === 'user' || message.role === 'user') {
+                messageElement.classList.add('user-message');
+                messageElement.innerHTML = `<p class="text-sm font-medium">${messageContent}</p>`;
+            } else if (message.type === 'model' || message.role === 'model') {
+                if (isTypingIndicator) {
+                    messageElement.classList.add('typing-indicator', 'ai-message', 'ai-temp-message');
+                    messageElement.innerHTML = `
+                        <div class="flex items-center">
+                            <i class="fa fa-robot text-primary text-md mr-3 flex-shrink-0"></i>
+                            <div class="flex space-x-1">
+                                <span class="typing-dot-bubble"></span>
+                                <span class="typing-dot-bubble"></span>
+                                <span class="typing-dot-bubble"></span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    messageElement.classList.add('ai-message');
+                    // Use a simple div for message content to handle formatting from AI response
+                    messageElement.innerHTML = `<div class="flex items-start"><i class="fa fa-robot text-primary text-md mr-3 flex-shrink-0 mt-1"></i><div class="text-sm text-gray-800">${messageContent.replace(/\n/g, '<br>')}</div></div>`;
+                }
+            }
 
-    if (message.type === 'user' || message.role === 'user') {
-        messageElement.classList.add('user-message');
-        // Use the safely-checked messageContent variable
-        messageElement.innerHTML = `<p class="text-sm font-medium">${messageContent}</p>`;
-    } else if (message.type === 'model' || message.role === 'model') {
-        messageElement.classList.add('ai-message');
-        // Use innerHTML for AI messages to render potential Markdown/code blocks
-        messageElement.innerHTML = `<div class="flex items-start"><i class="fa fa-robot text-primary text-md mr-3 flex-shrink-0 mt-1"></i><p class="text-sm text-gray-800">${messageContent}</p></div>`;
-    }
+            chatWindow.appendChild(messageElement);
+            scrollToBottom();
+            return messageElement;
+        }
 
-    chatWindow.appendChild(messageElement);
-    scrollToBottom();
-}
         // --- Chat Persistence Functions (Using Express Endpoints) ---
 
-       async function loadHistory() {
-    try {
-        const response = await fetch(`/api/ai-chat/history?username=${loggedInUser}`);
-        if (!response.ok) throw new Error('Failed to fetch history');
+        async function loadHistory() {
+            try {
+                // Ensure the username is correctly encoded for the URL
+                const response = await fetch(`/api/ai-chat/history?username=${encodeURIComponent(loggedInUser)}`);
+                if (!response.ok) throw new Error('Failed to fetch history');
 
-        const data = await response.json();
+                const data = await response.json();
 
-        if (data.success && Array.isArray(data.history)) {
+                if (data.success && Array.isArray(data.history)) {
 
-            chatHistory = data.history.map(msg => ({
-                role: msg.role,
-                // CRITICAL FIX: Extract the text from the 'parts' array
-                content: (msg.parts && msg.parts.length > 0) ? msg.parts[0].text : ''
-            }));
+                    // The history coming from the server is expected to be in the Gemini/server storage format
+                    chatHistory = data.history.map(msg => ({
+                        role: msg.role,
+                        // CRITICAL FIX: Extract the text from the 'parts' array
+                        content: (msg.parts && msg.parts.length > 0 && msg.parts[0].text) ? msg.parts[0].text : ''
+                    })).filter(msg => msg.content); // Filter out empty messages
 
-            // Render existing history
-            chatHistory.forEach(msg => appendMessage(msg));
+                    // Render existing history
+                    chatHistory.forEach(msg => appendMessage(msg));
+                }
+            } catch (error) {
+                console.error('Error loading history:', error);
+                // The error message is non-critical, so we don't show a popup.
+            }
+
+            // Show welcome message only if history is empty
+            if (chatHistory.length === 0) {
+                showWelcomeMessage();
+            }
         }
-    } catch (error) {
-        console.error('Error loading history:', error);
-        showMessage('Failed to load previous chat history.', 'error');
-    }
-
-    // Show welcome message only if history is empty
-    if (chatHistory.length === 0) {
-        showWelcomeMessage();
-    }
-}
 
         async function saveExchange(userMessage, aiResponse) {
             try {
+                // This assumes your server-side POST endpoint can handle the save operation
                 await fetch('/api/ai-chat/message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -258,7 +313,6 @@
                 });
             } catch (error) {
                 console.error('Error saving chat exchange:', error);
-                // Non-critical error, do not block the user, but log it.
             }
         }
 
@@ -267,7 +321,7 @@
         function showWelcomeMessage() {
             const welcomeMessage = {
                 type: 'model',
-                content: `Hello ${loggedInUser}! I'm the ConnectHub AI Assistant. I can help you with questions about your social network, community rules, or general topics. How can I assist you today?`
+                content: `Hello ${loggedInUser}! I'm the **ConnectHub AI Assistant**. I can help you with questions about your social network, community rules, or general topics. How can I assist you today?`
             };
             appendMessage(welcomeMessage);
         }
@@ -276,48 +330,68 @@
             if (isAILoading || !prompt) return;
 
             isAILoading = true;
-            loadingIndicator.classList.remove('hidden');
             sendButton.disabled = true;
+            // Removed: loadingIndicator.classList.remove('hidden'); // Rely on the message bubble indicator
+
+            // 1. Add user message to history
+            const userMessage = { role: 'user', content: prompt, type: 'user' };
+            chatHistory.push(userMessage);
+
+            // 2. Display the animated typing indicator
+            const typingElement = appendMessage({ role: 'model', type: 'model' }, true);
 
             try {
-                // Add user message to history
-                const userMessage = { role: 'user', content: prompt, type: 'user' };
-                chatHistory.push(userMessage);
-
                 // Gemini API expects the entire history, converted to its parts format
                 const geminiHistory = chatHistory.map(msg => ({
                     role: msg.role,
                     parts: [{ text: msg.content }]
                 }));
 
-                const response = await fetch(API_URL, {
+                // 3. Call the server-side proxy
+                const response = await fetch(CHAT_PROXY_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: geminiHistory,
+                        username: loggedInUser
                     }),
                 });
 
+                // 4. Handle non-OK response from server proxy
                 if (!response.ok) {
-                    throw new Error(`AI API failed: ${response.status} ${response.statusText}`);
+                    const errorBody = await response.json().catch(() => ({ message: 'Unknown server error' }));
+                    throw new Error(`AI Proxy failed: ${response.status} ${response.statusText}. Detail: ${errorBody.message}`);
                 }
 
                 const data = await response.json();
-                const aiResponseContent = data.candidates[0].content.parts[0].text;
+                const aiResponseContent = data.text || ''; // Assume server returns the text in the 'text' field
 
-                // Add AI response to history and append to UI
+                if (!aiResponseContent) {
+                    throw new Error('AI response was empty or malformed.');
+                }
+
+                // 5. Update the history and replace the typing indicator with the final message
                 const aiMessage = { role: 'model', content: aiResponseContent, type: 'model' };
                 chatHistory.push(aiMessage);
+
+                // Remove the typing indicator element
+                typingElement.remove();
+
+                // Append the final AI message
                 appendMessage(aiMessage);
 
-                // Save the full exchange to the server
+                // 6. Save the full exchange to the server
                 await saveExchange(prompt, aiResponseContent);
 
             } catch (error) {
                 console.error('AI Error:', error);
+
+                // Ensure typing indicator is removed on error
+                typingElement.remove();
+
                 const errorMessage = {
                     type: 'model',
-                    content: 'Sorry, I encountered an error while trying to respond. Please check the API key and server connection.'
+                    content: 'Sorry, I encountered an error while trying to respond. Please check the server connection and ensure the Gemini API Key is correctly configured on the server side.'
                 };
                 appendMessage(errorMessage);
             } finally {
@@ -342,27 +416,36 @@
             await sendMessageToAI(prompt);
         });
 
-        // Auto-resize textarea
+        // Auto-resize textarea and adjust chat window margin
         userInput.addEventListener('input', () => {
-            // Recalculate margin for chat window when input grows
+            // First, reset height to auto to determine the scrollHeight
+            userInput.style.height = 'auto';
+            // Set the new height
+            userInput.style.height = userInput.scrollHeight + 'px';
+
+            // Then, recalculate the margin for the chat window
             const currentHeight = inputContainer.offsetHeight;
             chatWindow.style.marginBottom = `${currentHeight}px`;
-
-            userInput.style.height = 'auto';
-            userInput.style.height = userInput.scrollHeight + 'px';
         });
 
         // Initial setup for the margin on load
         document.addEventListener('DOMContentLoaded', () => {
             loadHistory();
+            // Calculate and set the initial margin
             const currentHeight = inputContainer.offsetHeight;
             chatWindow.style.marginBottom = `${currentHeight}px`;
+
+            // Fix for mobile: adjust margin on window resize (e.g., keyboard pop-up)
+            window.addEventListener('resize', () => {
+                const resizedHeight = inputContainer.offsetHeight;
+                chatWindow.style.marginBottom = `${resizedHeight}px`;
+                scrollToBottom();
+            });
         });
 
         // Logout Button
         document.getElementById('logout-button').addEventListener('click', () => {
              localStorage.removeItem('username');
-             // Redirect to the login page
              window.location.href = '/';
         });
     </script>

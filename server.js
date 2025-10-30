@@ -1,4 +1,4 @@
-// --- server.js (Production Ready with Group Chat & File Upload) ---
+// --- / --- server.js (Production Ready with Group Chat & File Upload) ---
 
 const express = require('express');
 const http = require('http');
@@ -7,12 +7,16 @@ const path = require('path');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
-const fs = require('fs'); // NEW: For file system operations
-const multer = require('multer'); // NEW: For handling multipart/form-data
+const fs = require('fs');
+const multer = require('multer');
 const db = require('./db');
 require('dotenv').config();
 
+// NEW: Import the Google Gen AI SDK and configuration
+const { GoogleGenAI } = require('@google/genai');
+
 // --- Import Database Functions (UPDATED) ---
+// ... (Your existing imports)
 const {
     getPublicPosts,
     getPostById,
@@ -55,8 +59,18 @@ const APP_URL = process.env.APP_URL || `http://localhost:${process.env.PORT || 3
 const app = express();
 const server = http.createServer(app);
 
+// Initialize Gemini AI Client
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+if (!GEMINI_API_KEY) {
+    console.warn("WARNING: GEMINI_API_KEY is not set in environment variables. AI chat will fail.");
+}
+// Initialize the AI client using the key from environment variables
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
+
 // Use a CORS configuration for production Socket.IO setup
 const io = socketIo(server, {
+// ... (Rest of Socket.IO config)
     cors: {
         origin: "*",
         methods: ["GET", "POST"]
@@ -65,7 +79,7 @@ const io = socketIo(server, {
 
 const saltRounds = 10;
 
-// --- Nodemailer Configuration ---
+// ... (Nodemailer Configuration)
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -76,7 +90,6 @@ const transporter = nodemailer.createTransport({
         rejectUnauthorized: false
     }
 });
-
 // -------------------------------------------------------------------
 // --- File Upload Configuration (Multer) ---
 // -------------------------------------------------------------------
@@ -129,7 +142,64 @@ app.get('/chat', (req, res) => {
 app.get('/chatbot', (req, res) => {
     res.sendFile(path.join(__dirname, 'chatbot.html'));
 });
+ // ------------------------------------------
+// --- API Endpoints: AI Chat Proxy (NEW & CRITICAL) ---
+// ------------------------------------------
 
+app.post('/api/chat-proxy', async (req, res) => {
+    // Client sends: { username, contents: chatHistoryInGeminiFormat }
+    const { username, contents } = req.body;
+
+    if (!GEMINI_API_KEY) {
+        return res.status(503).json({ success: false, message: 'AI Service Unavailable: API Key missing on server.' });
+    }
+
+    if (!username || !contents || contents.length === 0) {
+        return res.status(400).json({ success: false, message: 'Missing username or chat history.' });
+    }
+
+    try {
+        const user = await findUserByUsername(username);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found.' });
+        }
+
+        // 1. Call the Gemini API with the provided history (contents)
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash", // Good default model
+            contents: contents, // Pass the full history for multi-turn chat
+        });
+
+        const aiResponseText = response.text;
+
+        // 2. Extract the user message from the *last* turn of the history
+        // The last element is always the current user prompt
+        const userMessagePart = contents[contents.length - 1].parts[0];
+        const userMessageText = userMessagePart ? userMessagePart.text : '';
+
+        // 3. Save the full exchange to the database using the existing functions
+        if (userMessageText) {
+             await saveAIChatMessage(user.user_id, 'user', userMessageText);
+             await saveAIChatMessage(user.user_id, 'model', aiResponseText);
+        }
+
+        // 4. Return the AI response text to the frontend
+        return res.json({
+            success: true,
+            text: aiResponseText,
+        });
+
+    } catch (error) {
+        console.error(`Error calling Gemini API for ${username}:`, error);
+
+        // Return a generic error to the frontend
+        return res.status(500).json({
+            success: false,
+            message: 'Internal error while communicating with the AI service. Please try again.',
+            details: error.message
+        });
+    }
+});
 // ------------------------------------------
 // --- API Endpoints: File Upload (NEW) ---
 // ------------------------------------------
@@ -355,13 +425,22 @@ app.get('/api/ai-chat/history', async (req, res) => {
     }
 });
 
-// POST to save AI chat message exchange (user message + AI response)
-app.post('/api/ai-chat/message', async (req, res) => {
-    const { username, userMessage, aiResponse } = req.body;
+// NEW: Secure Proxy Endpoint for AI Chat Interaction
+app.post('/api/ai-chat/send', async (req, res) => {
+    const { username, prompt } = req.body;
 
-    if (!username || !userMessage || !aiResponse) {
-        return res.status(400).json({ success: false, message: 'Missing required chat fields.' });
+    // 1. Validation and User Lookup
+    if (!username || !prompt) {
+        return res.status(400).json({ success: false, message: 'Username and prompt are required.' });
     }
+
+    // CRITICAL SECURITY: The API Key must be read from environment variables (e.g., .env file).
+    const API_KEY = process.env.GEMINI_API_KEY;
+    if (!API_KEY) {
+        console.error('AI service misconfigured. GEMINI_API_KEY missing from environment.');
+        return res.status(500).json({ success: false, message: 'AI service misconfigured. API Key missing.' });
+    }
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
 
     try {
         const user = await findUserByUsername(username);
@@ -370,19 +449,51 @@ app.post('/api/ai-chat/message', async (req, res) => {
         }
         const userId = user.user_id;
 
+        // 2. Load Existing History
+        // History is fetched in Gemini format: {role: 'user/model', parts: [{text: '...'}]}
+        const chatHistory = await getAIChatHistory(userId);
+
+        // 3. Prepare Full History for Gemini API
+        // Add the *current* user message to the history list for the API call
+        const currentUserMessage = { role: 'user', parts: [{ text: prompt }] };
+        const geminiHistory = [...chatHistory, currentUserMessage];
+
+        // 4. Call Gemini API (using global fetch)
+        const apiResponse = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: geminiHistory,
+            }),
+        });
+
+        if (!apiResponse.ok) {
+            const errorText = await apiResponse.text();
+            throw new Error(`External AI API failed: ${apiResponse.status} - ${errorText}`);
+        }
+
+        const data = await apiResponse.json();
+        const aiResponseContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (!aiResponseContent) {
+            throw new Error('AI response was empty or malformed.');
+        }
+
+        // 5. Save the full exchange to the database
         // Save User Message
-        await saveAIChatMessage(userId, 'user', userMessage);
-
+        await saveAIChatMessage(userId, 'user', prompt);
         // Save AI Response
-        await saveAIChatMessage(userId, 'model', aiResponse);
+        await saveAIChatMessage(userId, 'model', aiResponseContent);
 
-        res.json({ success: true, message: 'Chat exchange saved.' });
+        // 6. Success Response: Send only the AI response back to the client
+        res.json({ success: true, aiResponse: aiResponseContent, message: 'AI response generated and history saved.' });
+
     } catch (error) {
-        console.error('Error saving AI chat message exchange:', error);
-        res.status(500).json({ success: false, message: 'Failed to save chat exchange.' });
+        console.error('Error in POST /api/ai-chat/send:', error.message);
+        // Ensure the error message is safe for client consumption
+        res.status(500).json({ success: false, message: 'Failed to communicate with AI service. Please try again later.' });
     }
 });
-
 
 // ------------------------------------------
 // --- API Endpoints: Group Chat (UPDATED) ---
