@@ -422,27 +422,31 @@
             return html;
         }
 
-        // -------------------------------------------------------------------
-        // --- Virtual Assistant Functions (NEW) ---
-        // -------------------------------------------------------------------
+       
 
-  
+// -------------------------------------------------------------------
+// --- Virtual Assistant Functions (NEW) ---
+// -------------------------------------------------------------------
 function toggleAssistantModal() {
     const modal = document.getElementById('assistant-modal');
     modal.classList.toggle('hidden');
+    
+    // Check if the modal is now visible
     if (!modal.classList.contains('hidden')) {
         // Pre-fill username and email if logged in
         if (loggedInUser) {
             document.getElementById('assistant-username').value = loggedInUser;
         }
         // Assuming your user object (if available globally) has an email property
-        if (loggedInUserEmail) { 
+        if (loggedInUserEmail) {
             document.getElementById('assistant-email').value = loggedInUserEmail;
-    
-        resetAssistantModal(); // Ensure it starts at step 1 when opening
+        }
+        
+        // Ensure it starts at step 1 and resets the form when opening
+        resetAssistantModal(); 
     }
-}
-}
+} // Fixed: Proper closure of the toggleAssistantModal function
+
 function updateAssistantStep() {
     const steps = document.querySelectorAll('.assistant-step');
     // Ensure the navigation buttons are hidden/shown based on step
@@ -474,13 +478,12 @@ function nextAssistantStep() {
         const username = document.getElementById('assistant-username').value.trim();
         const email = document.getElementById('assistant-email').value.trim();
         if (!username || !email) {
-            // Note: showMessage() function must be defined elsewhere (e.g., in index.html)
             showMessage('Please enter your username and email.', 'error');
             return;
         }
     }
     
-    if (currentAssistantStep < 3) { 
+    if (currentAssistantStep < 3) {
         currentAssistantStep++;
         updateAssistantStep();
     }
@@ -488,7 +491,7 @@ function nextAssistantStep() {
 
 function prevAssistantStep() {
     // Only allow back if not on the first or final step
-    if (currentAssistantStep > 1 && currentAssistantStep < 4) { 
+    if (currentAssistantStep > 1 && currentAssistantStep < 4) {
         currentAssistantStep--;
         updateAssistantStep();
     } else if (currentAssistantStep === 4) {
