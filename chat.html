@@ -11,210 +11,246 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
-        :root {
-            --primary-color: #4CAF50; /* Green - Used for App branding/buttons */
-            --secondary-color: #388E3C; /* Darker Green */
-            --background-color: #f7f9fc;
-        }
-        /* FIX: Enforce full height and hide body scroll */
-        html { height: 100%; }
-        body {
-            height: 100%;
-            overflow: hidden; /* Prevents the whole body from scrolling */
-            font-family: 'Inter', sans-serif;
-            background-color: var(--background-color);
-            margin: 0;
-        }
+    :root {
+        --primary-color: #4CAF50; /* Green - Used for App branding/buttons */
+        --secondary-color: #388E3C; /* Darker Green */
+        --background-color: #f7f9fc;
+    }
+    /* FIX: Enforce full height and hide body scroll */
+    html { height: 100%; }
+    body {
+        height: 100%;
+        overflow: hidden; /* Prevents the whole body from scrolling */
+        font-family: 'Inter', sans-serif;
+        background-color: var(--background-color);
+        margin: 0;
+    }
 
-        /* Custom scrollbar for chat history */
-        #chat-history::-webkit-scrollbar { width: 6px; }
-        #chat-history::-webkit-scrollbar-thumb {
-            background-color: rgba(0, 0, 0, 0.2);
-            border-radius: 3px;
-        }
+    /* Custom scrollbar for chat history */
+    #chat-history::-webkit-scrollbar { width: 6px; }
+    #chat-history::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 3px;
+    }
 
-        /* --- CHAT ALIGNMENT FIX START (Original logic is robust) --- */
+    /* --- CHAT ALIGNMENT --- */
 
-        /* Message container for alignment (used by the loop) */
-        .message-container {
-            display: flex; /* Enables flexbox alignment */
-            margin-bottom: 10px;
-        }
+    /* Message container for alignment (used by the loop) */
+    .message-container {
+        display: flex; /* Enables flexbox alignment */
+        margin-bottom: 10px;
+    }
 
-        /* Styles for messages sent by the current user (Pushes to the right) */
-        .message-container.sent {
-            justify-content: flex-end;
-        }
+    /* Styles for messages sent by the current user (Pushes to the right) */
+    .message-container.sent {
+        justify-content: flex-end;
+    }
 
-        /* Styles for messages received from the other user (Keeps to the left) */
-        .message-container.received {
-            justify-content: flex-start;
-        }
+    /* Styles for messages received from the other user (Keeps to the left) */
+    .message-container.received {
+        justify-content: flex-start;
+    }
 
-        /* Styles for the message bubble itself */
+    /* Styles for the message bubble itself */
+    .message-bubble {
+        /* Mobile Default: Max 85% width for better use of small screens */
+        max-width: 85%;
+        padding: 10px 14px;
+        border-radius: 18px;
+        word-wrap: break-word;
+        line-height: 1.4;
+        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08); /* Subtle shadow */
+    }
+
+    /* Adjust max-width for larger screens (e.g., tablet/desktop) */
+    @media (min-width: 640px) {
         .message-bubble {
-            max-width: 60%; /* Limits bubble width */
-            padding: 10px 14px;
-            border-radius: 18px;
-            word-wrap: break-word;
-            line-height: 1.4;
-            box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08); /* Subtle shadow */
+            max-width: 60%;
         }
+    }
 
-        /* SENT (My) Message Bubble Style */
-        .message-container.sent .message-bubble {
-            background-color: var(--primary-color); /* Primary color bubble */
-            color: white;
-            /* Curved corners for sent messages */
-            border-bottom-right-radius: 4px;
-        }
+    /* SENT (My) Message Bubble Style */
+    .message-container.sent .message-bubble {
+        background-color: var(--primary-color); /* Primary color bubble */
+        color: white;
+        /* Curved corners for sent messages */
+        border-bottom-right-radius: 4px;
+    }
 
-        /* RECEIVED (Other) Message Bubble Style */
-        .message-container.received .message-bubble {
-            background-color: #ffffff; /* White/light gray bubble */
-            color: #374151; /* Darker text */
-            /* Curved corners for received messages */
-            border-bottom-left-radius: 4px;
-        }
+    /* RECEIVED (Other) Message Bubble Style */
+    .message-container.received .message-bubble {
+        background-color: #ffffff; /* White/light gray bubble */
+        color: #374151; /* Darker text */
+        /* Curved corners for received messages */
+        border-bottom-left-radius: 4px;
+    }
 
-        .message-time {
-            font-size: 0.65rem;
-            opacity: 0.8;
-            margin-top: 5px;
-            display: block;
-            text-align: right;
-            /* Darker time for received messages for better contrast */
-            color: inherit;
-        }
+    .message-time {
+        font-size: 0.65rem;
+        opacity: 0.8;
+        margin-top: 5px;
+        display: block;
+        text-align: right;
+        color: inherit;
+    }
 
-        /* Ensure time is white on sent messages */
-        .message-container.sent .message-time {
-            color: rgba(255, 255, 255, 0.9);
-        }
+    /* Ensure time is white on sent messages */
+    .message-container.sent .message-time {
+        color: rgba(255, 255, 255, 0.9);
+    }
 
-        /* --- CHAT ALIGNMENT FIX END --- */
+    /* --- MOBILE/TABLET/LARGE SCREEN OPTIMIZATION FIX START --- */
 
-        /* === MOBILE/TABLET/LARGE SCREEN OPTIMIZATION FIX START === */
+    /* 1. Sidebar Base/Mobile Styles (Full screen takeover, hidden by default) */
+    #user-list-sidebar {
+        transition: width 0.3s ease, min-width 0.3s ease, transform 0.3s ease;
+        transform: translateX(-100%); /* Hidden by default on mobile */
+        position: fixed; top: 0; left: 0;
+        height: 100vh;
+        z-index: 50;
+        width: 100%; min-width: 100%; /* Full screen on mobile */
+        background-color: white;
+        box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2); /* Shadow for overlay effect */
+    }
+    /* Mobile: When opened by JS */
+    #user-list-sidebar.open {
+        transform: translateX(0);
+    }
+    /* Hide desktop toggle button on mobile */
+    #sidebar-toggle-button {
+        display: none !important;
+    }
 
-        /* 1. Sidebar Base/Mobile Styles */
+    /* 2. Desktop (lg: 1024px) Styles */
+    @media (min-width: 1024px) {
         #user-list-sidebar {
-            transition: width 0.3s ease, min-width 0.3s ease, transform 0.3s ease;
-            transform: translateX(-100%); /* Hidden by default on mobile */
-            position: fixed; top: 0; left: 0; height: 100vh; z-index: 50;
-            width: 100%; min-width: 100%; /* Full screen on mobile */
-            background-color: white; /* Changed from semi-transparent */
+            position: static; /* No longer fixed */
+            transform: translateX(0); /* Always visible */
+            width: 300px; min-width: 300px; /* Fixed width on desktop */
+            box-shadow: none; /* No overlay shadow */
+            flex-shrink: 0; /* Ensures it doesn't shrink in the flex container */
         }
-        /* Mobile: When opened by JS */
-        #user-list-sidebar.open { transform: translateX(0); }
-        /* Hide toggle button on mobile */
-        #sidebar-toggle-button { display: none !important; }
-
-        /* 2. Tablet/Small Desktop (lg: 1024px) Styles */
-        @media (min-width: 1024px) {
-            #user-list-sidebar {
-                position: static; /* No longer fixed */
-                transform: translateX(0); /* Always visible */
-                width: 300px; min-width: 300px; /* Fixed width on desktop */
-                box-shadow: none; /* No overlay shadow */
-            }
-            /* Hide mobile open/close buttons on desktop */
-            #sidebar-open-mobile, #sidebar-close-mobile { display: none !important; }
-            /* Show desktop toggle button */
-            #sidebar-toggle-button { display: block !important; }
-
-            /* Ensure main content takes remaining space */
-            #chat-main {
-                width: calc(100% - 300px); /* Adjust based on initial sidebar width */
-            }
+        /* Hide mobile open/close buttons on desktop */
+        #sidebar-open-mobile, #sidebar-close-mobile {
+            display: none !important;
+        }
+        /* Show desktop toggle button */
+        #sidebar-toggle-button {
+            display: block !important;
         }
 
-        /* 3. Minimized Sidebar (Desktop only) */
-        .sidebar-minimized { width: 80px !important; min-width: 80px !important; }
-        .sidebar-minimized .user-name, .sidebar-minimized .app-logo,
-        .sidebar-minimized .nav-links, .sidebar-minimized .unread-badge,
-        .sidebar-minimized .tab-selector, .sidebar-minimized .member-info { display: none; }
-        .sidebar-minimized .user-avatar { margin: 0 auto; }
-        .sidebar-minimized .user-item { padding-left: 0 !important; text-align: center; }
-        .sidebar-minimized .user-item .flex { justify-content: center !important; }
-        .sidebar-minimized .user-item .status-wrapper { margin: 0 !important; }
-        .sidebar-minimized #sidebar-toggle-button i { transform: rotate(180deg); }
+        /* Ensure main content takes remaining space (assuming parent is flex) */
+        #chat-main {
+            flex-grow: 1;
+        }
+    }
 
-        /* 4. Chat Header Mobile Fix: Move recipient name to left on mobile */
-        @media (max-width: 1023px) {
-            #chat-header > div.flex {
-                width: 100%;
-            }
-            #recipient-name {
-                flex-grow: 1; /* Allows name to take space */
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-            #add-member-btn {
-                flex-shrink: 0; /* Prevents button from shrinking */
-            }
-        }
-        /* === MOBILE/TABLET/LARGE SCREEN OPTIMIZATION FIX END === */
+    /* 3. Minimized Sidebar (Desktop only) */
+    .sidebar-minimized {
+        width: 80px !important;
+        min-width: 80px !important;
+    }
+    .sidebar-minimized .user-name,
+    .sidebar-minimized .app-logo,
+    .sidebar-minimized .nav-links,
+    .sidebar-minimized .unread-badge,
+    .sidebar-minimized .tab-selector,
+    .sidebar-minimized .member-info {
+        display: none;
+    }
+    .sidebar-minimized .user-avatar {
+        margin: 0 auto;
+    }
+    .sidebar-minimized .user-item {
+        padding-left: 0 !important;
+        text-align: center;
+    }
+    .sidebar-minimized .user-item .flex {
+        justify-content: center !important;
+    }
+    .sidebar-minimized .user-item .status-wrapper {
+        margin: 0 !important;
+    }
+    .sidebar-minimized #sidebar-toggle-button i {
+        transform: rotate(180deg);
+    }
 
-        /* Custom Tab Styling */
-        .tab-button.active {
-            border-bottom: 2px solid var(--primary-color);
-            color: var(--primary-color);
-            font-weight: 600;
+    /* 4. Chat Header Mobile Fix: Move recipient name to left on mobile */
+    @media (max-width: 1023px) {
+        #chat-header > div.flex {
+            width: 100%;
         }
-        .create-group-button {
-            transition: transform 0.2s;
+        #recipient-name {
+            flex-grow: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-        .create-group-button:hover {
-            transform: scale(1.1);
+        #add-member-btn {
+            flex-shrink: 0;
         }
+    }
+    /* --- MOBILE/TABLET/LARGE SCREEN OPTIMIZATION FIX END --- */
 
-        /* Custom Toast Styles */
-        .toast-enter-active, .toast-leave-active { transition: opacity 0.3s, transform 0.3s; }
-        .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(20px); }
+    /* Custom Tab Styling */
+    .tab-button.active {
+        border-bottom: 2px solid var(--primary-color);
+        color: var(--primary-color);
+        font-weight: 600;
+    }
+    .create-group-button {
+        transition: transform 0.2s;
+    }
+    .create-group-button:hover {
+        transform: scale(1.1);
+    }
 
-        /* NEW: File Picker Modal Styles */
-        .file-picker-item {
-            display: flex;
-            align-items: center;
-            padding: 10px;
-            border-radius: 8px;
-            transition: background-color 0.15s;
-        }
-        .file-picker-item:hover {
-            background-color: #f3f4f6;
-        }
+    /* Custom Toast Styles */
+    .toast-enter-active, .toast-leave-active { transition: opacity 0.3s, transform 0.3s; }
+    .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(20px); }
 
-        /* File bubble styling */
-        .file-bubble {
-            display: flex;
-            align-items: center;
-            padding: 8px;
-            border-radius: 12px;
-            background-color: rgba(0, 0, 0, 0.1);
-        }
-        .message-container.sent .file-bubble {
-            background-color: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-        }
-        .message-container.received .file-bubble {
-            background-color: #f0f4f8;
-            border: 1px solid #e0e6ec;
-        }
-        .file-icon {
-            font-size: 24px;
-            margin-right: 10px;
-            color: var(--primary-color);
-        }
-        .message-container.sent .file-icon {
-            color: #ffffff;
-        }
-        .file-info a {
-            font-weight: 600;
-            text-decoration: underline;
-        }
+    /* NEW: File Picker Modal Styles */
+    .file-picker-item {
+        display: flex;
+        align-items: center;
+        padding: 10px;
+        border-radius: 8px;
+        transition: background-color 0.15s;
+    }
+    .file-picker-item:hover {
+        background-color: #f3f4f6;
+    }
 
-    </style>
+    /* File bubble styling */
+    .file-bubble {
+        display: flex;
+        align-items: center;
+        padding: 8px;
+        border-radius: 12px;
+        background-color: rgba(0, 0, 0, 0.1);
+    }
+    .message-container.sent .file-bubble {
+        background-color: rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    .message-container.received .file-bubble {
+        background-color: #f0f4f8;
+        border: 1px solid #e0e6ec;
+    }
+    .file-icon {
+        font-size: 24px;
+        margin-right: 10px;
+        color: var(--primary-color);
+    }
+    .message-container.sent .file-icon {
+        color: #ffffff;
+    }
+    .file-info a {
+        font-weight: 600;
+        text-decoration: underline;
+    }
+
+</style>
 </head>
 <body class="min-h-screen flex flex-col">
 
