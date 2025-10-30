@@ -499,7 +499,20 @@ async function getAIChatHistory(userId) {
     }));
 }
 
-
+ // Function to save a user support concern to the database
+function saveSupportTicket(userId, username, email, concern) {
+    return new Promise((resolve, reject) => {
+        const sql = `INSERT INTO support_tickets (user_id, username, email, concern) VALUES (?, ?, ?, ?)`;
+        db.run(sql, [userId, username, email, concern], function(err) {
+            if (err) {
+                console.error("Database error saving support ticket:", err);
+                reject(err);
+            } else {
+                resolve(this.lastID); // Return the new ticket ID
+            }
+        });
+    });
+}
 // --- MODULE EXPORTS ---
 
 module.exports = {
@@ -546,5 +559,8 @@ module.exports = {
 
     // AI Chat (NEW)
     saveAIChatMessage,
-    getAIChatHistory,
+ getAIChatHistory,
+// virtual assistant
+saveSupportTicket,
+
 };
