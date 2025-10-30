@@ -909,6 +909,45 @@ app.post('/api/posts/:id/reply', async (req, res) => {
     }
 });
 
+
+// --- NEW: Virtual Assistant Concern Submission API ---
+app.post('/api/submit-concern', async (req, res) => {
+    const { username, email, concern } = req.body;
+    const targetEmail = 'oyoookoth42@gmail.com'; // Hardcoded target email
+
+    if (!username || !email || !concern) {
+        return res.status(400).json({ success: false, message: 'Missing username, email, or concern.' });
+    }
+
+    const mailOptions = {
+        to: targetEmail,
+        from: process.env.EMAIL_USER,
+        subject: `ConnectHub Assistant Concern from ${username}`,
+        html: `
+            <p>A new concern has been submitted through the Virtual Assistant:</p>
+            <hr>
+            <p><strong>Username:</strong> ${username}</p>
+            <p><strong>User Email:</strong> ${email}</p>
+            <p><strong>Concern:</strong></p>
+            <div style="border: 1px solid #ccc; padding: 10px; margin-top: 10px; background-color: #f9f9f9;">
+                <p>${concern.replace(/\n/g, '<br>')}</p>
+            </div>
+            <hr>
+            <p>Please respond to the user at ${email}.</p>
+        `,
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`Successfully sent concern email from ${username} to ${targetEmail}`);
+        res.json({ success: true, message: 'Concern submitted and email sent successfully.' });
+    } catch (error) {
+        console.error('Email sending error for virtual assistant:', error);
+        // Respond with success to the user, but log error internally
+        // This is a common practice to avoid giving away server details on failure
+        res.status(500).json({ success: false, message: 'Internal server error. Could not send email.' });
+    }
+});
 app.post('/signup', async (req, res) => {
     const { username, password, email } = req.body;
     if (!username || !password || !email) return res.status(400).json({ success: false, message: 'Username, password, and email are required.' });
