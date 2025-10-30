@@ -10,7 +10,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <style>
+   <style>
         :root {
             --primary-color: #4CAF50; /* Green */
             --secondary-color: #388E3C; /* Darker Green */
@@ -99,18 +99,22 @@
             40% { transform: scale(1); opacity: 1; }
         }
 
-        /* NEW: Responsive container for mobile takeover */
+        /* --- CRITICAL RESPONSIVENESS FIXES START HERE --- */
+
+        /* 1. Chatbot App Container */
         #chatbot-app {
+            /* Mobile Default: Full screen takeover */
             width: 100vw;
             height: 100vh;
-            /* On larger screens, center it with max-width */
             margin: 0 auto;
             max-width: 100%;
+            position: relative; /* CRITICAL: Allows input-container to be ABSOLUTELY positioned on desktop */
         }
         @media (min-width: 768px) {
             #chatbot-app {
-                max-width: 672px; /* max-w-3xl is 48rem/768px, using 768px for clarity */
-                height: 90vh; /* make it slightly smaller on desktop */
+                /* Desktop/Tablet: Centered, smaller box */
+                max-width: 672px; /* max-w-3xl */
+                height: 90vh;
                 margin-top: 5vh;
                 margin-bottom: 5vh;
                 border-radius: 16px; /* rounded-xl */
@@ -118,17 +122,22 @@
             }
         }
 
-        /* FIX: Ensure input container is absolutely positioned relative to the parent #chatbot-app */
+        /* 2. Input Container Positioning */
         #input-container {
-            position: absolute; /* Changed from fixed */
-            left: 0;
-            right: 0;
+            /* Mobile Default: Fixed to the viewport bottom */
+            position: fixed;
+            inset-x: 0; /* left: 0 and right: 0 */
             bottom: 0;
+            z-index: 10;
+            width: 100%;
         }
-        /* FIX: On desktop, the input container must respect the max-width of the #chatbot-app */
+
         @media (min-width: 768px) {
             #input-container {
-                width: 100%; /* Fill the parent width */
+                /* Desktop Override: Positioned absolutely within the centered #chatbot-app container */
+                position: absolute;
+                width: 100%; /* Fill the width of the parent #chatbot-app */
+                /* The inner div handles the max-width and centering */
             }
         }
     </style>
