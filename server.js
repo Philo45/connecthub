@@ -50,7 +50,9 @@ const {
     saveFileMetadata,
     // AI CHAT FUNCTIONS (NEW)
     saveAIChatMessage,
-    getAIChatHistory
+    getAIChatHistory,
+    // 🟢 FIX APPLIED HERE: Added the missing function for Virtual Assistant
+    saveSupportTicket 
 } = require('./db');
 
 // --- Configuration Constants ---
@@ -434,7 +436,7 @@ app.post('/api/ai-chat/send', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Username and prompt are required.' });
     }
 
-    // CRITICAL SECURITY: The API Key must be read from environment variables (e.g., .env file).
+    // CRITICAL SECURITY: The API Key must be read from environment variables (e.env file).
     const API_KEY = process.env.GEMINI_API_KEY;
     if (!API_KEY) {
         console.error('AI service misconfigured. GEMINI_API_KEY missing from environment.');
@@ -929,6 +931,7 @@ app.post('/api/submit-concern', async (req, res) => {
         const userId = user ? user.user_id : null;
 
         // Save the ticket to the database (Requires implementation in db.js)
+        // This function is now correctly imported at the top of the file.
         const ticketId = await saveSupportTicket(userId, username, email, concern);
         console.log(`Saved support ticket ID: ${ticketId}`);
         // -----------------------------------
