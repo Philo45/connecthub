@@ -21,6 +21,7 @@ const dbConfig = {
     queueLimit: 0,
     connectTimeout: 20000, // Increased timeout for cloud connection stability
     // CRITICAL: SSL configuration required for secure cloud connections (e.g., Railway)
+   charset: 'utf8mb4',
     ssl: {
         rejectUnauthorized: false
     }
