@@ -355,7 +355,7 @@ async function getGroupDetails(groupId) {
             g.group_name,
             g.creator_id,
             u.username AS creator_username
-        FROM groups g
+        FROM \`groups\` g
         JOIN users u ON g.creator_id = u.user_id
         WHERE g.group_id = ?
     `, [groupId]);
@@ -380,12 +380,16 @@ async function getUserGroups(userId) {
             u.username AS creator_username,
             (SELECT COUNT(*) FROM group_members WHERE group_id = g.group_id) AS member_count,
             (SELECT MAX(sent_at) FROM group_messages WHERE group_id = g.group_id) AS last_activity
-        FROM groups g
+        FROM \`groups\` g -- **CORRECTION 1: Backticks added here**
         JOIN group_members gm ON g.group_id = gm.group_id
         JOIN users u ON g.creator_id = u.user_id
         WHERE gm.user_id = ?
         ORDER BY g.group_id DESC
     `, [userId]);
+    // NOTE: The server-side error was caused by the SQL query.
+    // The previous schema you showed had a typo (crCREATEeator_id), 
+    // but the SQL query here uses g.creator_id, which assumes the typo 
+    // has been corrected in the database schema.
     return rows;
 }
 
@@ -500,18 +504,16 @@ async function getAIChatHistory(userId) {
 }
 
  // Function to save a user support concern to the database
-function saveSupportTicket(userId, username, email, concern) {
-    return new Promise((resolve, reject) => {
+async function saveSupportTicket(userId, username, email, concern) {
+    // **CORRECTION 2: Replaced incorrect sqlite/db.run with pool.query for mysql2**
+    try {
         const sql = `INSERT INTO support_tickets (user_id, username, email, concern) VALUES (?, ?, ?, ?)`;
-        db.run(sql, [userId, username, email, concern], function(err) {
-            if (err) {
-                console.error("Database error saving support ticket:", err);
-                reject(err);
-            } else {
-                resolve(this.lastID); // Return the new ticket ID
-            }
-        });
-    });
+        const [result] = await pool.query(sql, [userId, username, email, concern]);
+        return result.insertId; // Return the new ticket ID
+    } catch (err) {
+        console.error("Database error saving support ticket:", err);
+        throw err; // Re-throw the error for the caller to handle
+    }
 }
 // --- MODULE EXPORTS ---
 
