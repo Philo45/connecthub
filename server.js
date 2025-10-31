@@ -51,8 +51,7 @@ const {
     // AI CHAT FUNCTIONS (NEW)
     saveAIChatMessage,
     getAIChatHistory,
-    // 🟢 FIX APPLIED HERE: Added the missing function for Virtual Assistant
-    saveSupportTicket 
+    
 } = require('./db');
 
 // --- Configuration Constants ---
@@ -932,7 +931,7 @@ app.post('/api/submit-concern', async (req, res) => {
 
         // Save the ticket to the database (Requires implementation in db.js)
         // This function is now correctly imported at the top of the file.
-        const ticketId = await saveSupportTicket(userId, username, email, concern);
+       const ticketId = await db.saveSupportTicket(userId, username, email, concern);
         console.log(`Saved support ticket ID: ${ticketId}`);
         // -----------------------------------
 
