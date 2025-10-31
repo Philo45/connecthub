@@ -216,6 +216,7 @@
 
     <div id="auth-container" class="w-full max-w-md my-auto p-8 pt-12">
         <h2 class="text-3xl font-bold text-center text-primary mb-6">ConnectHub</h2>
+        
         <form id="auth-form" class="bg-white p-6 rounded-lg shadow-xl">
             <h3 id="auth-title" class="text-xl font-semibold mb-4">Login</h3>
 
@@ -244,9 +245,30 @@
                 </button>
             </div>
             <div class="mt-2 text-center">
-                <a href="forgot-password.html" class="text-xs text-gray-500 hover:text-gray-700">
+                <button type="button" id="toggle-forgot" class="text-xs text-gray-500 hover:text-gray-700">
                     Forgot Password?
-                </a>
+                </button>
+            </div>
+        </form>
+        
+        <form id="forgot-password-form" class="bg-white p-6 rounded-lg shadow-xl hidden">
+            <h3 class="text-xl font-semibold mb-4 text-primary">Reset Password</h3>
+
+            <p class="mb-4 text-gray-600 text-sm">Enter your username or email address and we'll send you a password reset link.</p>
+
+            <div class="mb-6">
+                <label for="forgot-identifier" class="block text-gray-700 text-sm font-bold mb-2">Username or Email</label>
+                <input type="text" id="forgot-identifier" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary" required>
+            </div>
+
+            <button type="submit" id="forgot-button" class="w-full bg-primary text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-secondary transition duration-200">
+                Send Reset Link
+            </button>
+
+            <div class="mt-4 text-center">
+                <button type="button" id="toggle-login" class="text-sm text-link hover:text-secondary">
+                    Back to Login
+                </button>
             </div>
         </form>
     </div>
@@ -382,14 +404,42 @@
             }
         }
 
-        function toggleAuthMode() {
+        function toggleAuthMode(toLogin = false) {
             isLoginMode = !isLoginMode;
             document.getElementById('auth-title').textContent = isLoginMode ? 'Login' : 'Sign Up';
             document.getElementById('auth-button').textContent = isLoginMode ? 'Login' : 'Sign Up';
             document.getElementById('toggle-auth').textContent = isLoginMode ? "Don't have an account? Sign Up" : "Already have an account? Login";
             document.getElementById('email-field').classList.toggle('hidden', isLoginMode);
             document.getElementById('email').required = !isLoginMode;
+            
+            // Ensure the main auth form is visible when toggling between login/signup
+            document.getElementById('auth-form').classList.remove('hidden');
+            document.getElementById('forgot-password-form').classList.add('hidden');
         }
+        
+        function toggleForgotMode(toLogin = false) {
+            const authForm = document.getElementById('auth-form');
+            const forgotForm = document.getElementById('forgot-password-form');
+            
+            if (toLogin) {
+                // Switch back to login
+                authForm.classList.remove('hidden');
+                forgotForm.classList.add('hidden');
+                isLoginMode = true; // Ensure the toggleAuthMode logic sees we are in login mode
+                // Reset to login mode visual state if not already there (prevents toggle-auth from changing text)
+                document.getElementById('auth-title').textContent = 'Login';
+                document.getElementById('auth-button').textContent = 'Login';
+                document.getElementById('toggle-auth').textContent = "Don't have an account? Sign Up";
+                document.getElementById('email-field').classList.add('hidden');
+                document.getElementById('email').required = false;
+
+            } else {
+                // Switch to forgot password form
+                authForm.classList.add('hidden');
+                forgotForm.classList.remove('hidden');
+            }
+        }
+
 
        function renderPost(post) {
             const isLiked = post.is_liked_by_user;
@@ -545,6 +595,36 @@
             }
         }
 
+        async function handleForgotPassword(e) {
+            e.preventDefault();
+            const identifier = document.getElementById('forgot-identifier').value.trim();
+            if (!identifier) return;
+            
+            // NOTE: This endpoint needs to be created in your server.js
+            try {
+                 const response = await fetch('/api/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ identifier })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showMessage(data.message || 'If an account exists, a reset link has been sent.', 'success');
+                } else {
+                    // For security, often the message is generic even on failure
+                    showMessage(data.message || 'Request failed. Please try again.', 'error');
+                }
+                
+                // Switch back to login after submission
+                toggleForgotMode(true); 
+
+            } catch (error) {
+                showMessage('Network error: Could not reach the server.', 'error');
+            }
+        }
+
         // -------------------------------------------------------------------
         // --- Virtual Assistant Functions (NEW) ---
         // -------------------------------------------------------------------
@@ -675,7 +755,7 @@
             } finally {
                 // Re-enable button and reset text
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = 'Submit Concern';
+                submitBtn.innerHTML = 'Submit';
             }
         }
         
@@ -734,7 +814,11 @@
                 if (response.ok && data.success) {
                     if (!isLoginMode) {
                         showMessage('Sign up successful! Please log in.', 'success');
-                        toggleAuthMode();
+                        // Use toggleForgotMode to reset to explicit login state
+                        toggleForgotMode(true); 
+                        // Then switch to login form
+                        document.getElementById('toggle-auth').click();
+
                     } else {
                         localStorage.setItem('username', username);
                         loggedInUser = username;
@@ -750,8 +834,17 @@
             }
         });
 
-        // Toggle Auth Mode
-        document.getElementById('toggle-auth').addEventListener('click', toggleAuthMode);
+        // Toggle Auth Mode (Sign Up/Login)
+        document.getElementById('toggle-auth').addEventListener('click', () => toggleAuthMode(false)); 
+        
+        // Toggle Forgot Password Mode (Open forgot form)
+        document.getElementById('toggle-forgot').addEventListener('click', () => toggleForgotMode(false));
+
+        // Toggle Login Mode (Back to Login from Forgot)
+        document.getElementById('toggle-login').addEventListener('click', () => toggleForgotMode(true)); 
+
+        // Forgot Password Submission Handler
+        document.getElementById('forgot-password-form').addEventListener('submit', handleForgotPassword);
 
         // Logout
         function handleLogout() {

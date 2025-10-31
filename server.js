@@ -333,85 +333,62 @@ app.post('/api/upload/file', upload.single('file'), async (req, res) => {
 // --- API Endpoints: Password Reset ---
 // ------------------------------------------
 
-app.post('/forgot-password', async (req, res) => {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ success: false, message: 'Email is required.' });
+// 🟢 NEW ROUTE: Handle Forgot Password Request
+app.post('/api/forgot-password', async (req, res) => {
+    const { identifier } = req.body; // Can be username or email
+
+    if (!identifier) {
+        return res.status(400).json({ success: false, message: 'Username or email is required.' });
+    }
 
     try {
-        const user = await findUserByEmail(email);
+        let user;
+        // Check if identifier is an email (basic check)
+        if (identifier.includes('@')) {
+            user = await findUserByEmail(identifier);
+        } else {
+            user = await findUserByUsername(identifier);
+        }
 
-        // CRITICAL SECURITY: Always respond with a generic success message
+        // IMPORTANT: For security, always send a generic success message
         if (!user) {
-            return res.json({ success: true, message: 'If an account is associated with that email, a password reset link has been sent.' });
+            return res.json({ success: true, message: 'If an account exists, a password reset link has been sent to the associated email.' });
         }
 
-        const token = crypto.randomBytes(20).toString('hex');
-        const expires = new Date(Date.now() + 3600000); // 1 hour expiration
+        // Generate a reset token and set an expiry time
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        await setResetToken(user.user_id, resetToken);
 
-        const affectedRows = await setResetToken(email, token, expires);
+        const resetLink = `${CLIENT_URL}/reset_form?token=${resetToken}`;
 
-        if (affectedRows > 0) {
-                   const resetUrl = `${HOST}:${PORT}/reset-password.html?token=${token}&userId=${user.user_id}`;
+        // Send email
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: user.email,
+            subject: 'ConnectHub Password Reset',
+            html: `
+                <p>You requested a password reset for your ConnectHub account.</p>
+                <p>Click <a href="${resetLink}">this link</a> to reset your password. This link will expire in 1 hour.</p>
+                <p>If you did not request this, please ignore this email.</p>
+            `
+        };
 
+        await transporter.sendMail(mailOptions);
 
-            const mailOptions = {
-                to: email,
-                from: process.env.EMAIL_USER,
-                subject: 'ConnectHub Password Reset',
-                text: `You are receiving this because you requested a password reset.\n\n`
-                    + `Click this link to complete the reset:\n`
-                    + `${resetUrl}\n\n`
-                    + `This link will expire in one hour. If you did not request this, please ignore this email.`
-            };
-
-            await transporter.sendMail(mailOptions);
-        }
-
-        res.json({ success: true, message: 'If an account is associated with that email, a password reset link has been sent.' });
+        res.json({ success: true, message: 'If an account exists, a password reset link has been sent to the associated email.' });
 
     } catch (error) {
-        console.error('Server error during POST /forgot-password:', error.message);
-        if (error.code === 'EENVELOPE') {
-            return res.status(500).json({ success: false, message: 'Failed to send email. Check Nodemailer configuration.' });
-        }
-        res.status(500).json({ success: false, message: 'Server error during password reset request.' });
+        console.error('Forgot password error:', error.message);
+        res.status(500).json({ success: false, message: 'Error processing reset request.' });
     }
 });
 
-app.get('/reset-password', async (req, res) => {
-    const { token } = req.query;
-    if (!token) return res.status(400).send('Invalid request: Token is missing.');
-
-    try {
-        const user = await findUserByResetToken(token);
-        if (!user) {
-            return res.status(400).send('Password reset token is invalid or has expired. Please request a new one.');
-        }
-        res.sendFile(path.join(__dirname, 'reset_form.html'));
-    } catch (error) {
-        console.error('Server error during GET /reset-password:', error.message);
-        res.status(500).send('A server error occurred during token verification.');
-    }
+// Route for the actual password reset form (must be served by index.html or a separate page)
+app.get('/reset_form', (req, res) => {
+    // This assumes your frontend (index.html) handles this route and reads the token from the query params
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.post('/reset-password', async (req, res) => {
-    const { token, newPassword } = req.body;
-    if (!token || !newPassword) return res.status(400).json({ success: false, message: 'Token and new password are required.' });
-
-    try {
-        const user = await findUserByResetToken(token);
-        if (!user) return res.status(400).json({ success: false, message: 'Password reset token is invalid or has expired.' });
-
-        const newHashedPassword = await bcrypt.hash(newPassword, saltRounds);
-        await resetPassword(user.user_id, newHashedPassword);
-
-        res.json({ success: true, message: 'Password has been successfully reset. You can now log in.' });
-
-    } catch (error) {
-        console.error('Server error during POST /reset-password:', error.message);
-        res.status(500).json({ success: false, message: 'Server error during password update.' });
-    }
-});
 
 // ------------------------------------------
 // --- API Endpoints: AI Chat History (NEW) ---
