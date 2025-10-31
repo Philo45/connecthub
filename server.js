@@ -151,6 +151,9 @@ app.get('/chat', (req, res) => {
 app.get('/chatbot', (req, res) => {
     res.sendFile(path.join(__dirname, 'chatbot.html'));
 });
+app.get('/forgot-password.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'forgot-password.html'));
+});
  // ------------------------------------------
 // --- API Endpoints: AI Chat Proxy (NEW & CRITICAL) ---
 // ------------------------------------------
