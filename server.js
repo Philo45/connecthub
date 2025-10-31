@@ -359,7 +359,7 @@ app.post('/api/forgot-password', async (req, res) => {
         const resetToken = crypto.randomBytes(32).toString('hex');
         await setResetToken(user.user_id, resetToken);
 
-        const resetLink = `${CLIENT_URL}/reset_form?token=${resetToken}`;
+        const resetLink = `${CLIENT_URL}/reset_form.html?token=${resetToken}`;
 
         // Send email
         const mailOptions = {
