@@ -82,11 +82,19 @@ const saltRounds = 10;
 
 // ... (Nodemailer Configuration)
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465, 
+    secure: true, // true for 465
     auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD
+        // CRITICAL: Must use a Google App Password here, not a regular password
+        pass: process.env.EMAIL_PASSWORD, 
     },
+    // Add timeouts to prevent generic 'ETIMEDOUT' by allowing more time
+    connectionTimeout: 10000, // 10 seconds
+    greetingTimeout: 5000,    // 5 seconds
+    // You can remove or keep the tls block, as 'secure: true' handles the security layer
+    // For maximal compatibility, you can keep the tls block:
     tls: {
         rejectUnauthorized: false
     }
