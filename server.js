@@ -962,6 +962,14 @@ app.post('/api/submit-concern', async (req, res) => {
         res.json({ success: true, message: 'Concern submitted and email sent successfully.' });
     } catch (error) {
         console.error('Email/DB saving error for virtual assistant:', error);
+        
+        // **CRITICAL FIX/IMPROVEMENT: Check for common email-related errors**
+        if (error.code === 'EAUTH' || error.code === 'EENVELOPE') {
+             // EAUTH is an authentication error (bad user/pass for Nodemailer)
+             // EENVELOPE is often a configuration/syntax error in the mail options
+             console.error(`Nodemailer error code: ${error.code}. Check EMAIL_USER and EMAIL_PASSWORD in .env and transporter config.`);
+        }
+
         res.status(500).json({ success: false, message: 'Internal server error. Could not complete submission.' });
     }
 });
