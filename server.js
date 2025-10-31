@@ -351,7 +351,8 @@ app.post('/forgot-password', async (req, res) => {
         const affectedRows = await setResetToken(email, token, expires);
 
         if (affectedRows > 0) {
-            const resetUrl = `${APP_URL}/reset-password?token=${token}`;
+                   const resetUrl = `${HOST}:${PORT}/reset-password.html?token=${token}&userId=${user.user_id}`;
+
 
             const mailOptions = {
                 to: email,
