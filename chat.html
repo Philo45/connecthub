@@ -344,20 +344,20 @@
     <div id="emoji-picker-container" class="absolute bottom-20 lg:right-5 right-16 bg-white border border-gray-200 rounded-xl shadow-2xl p-4 w-60 h-80 z-30 hidden">
         <h4 class="text-sm font-semibold text-gray-600 mb-2 border-b pb-1">Select Emoji</h4>
         <div id="emoji-list" class="flex flex-wrap gap-2 text-2xl overflow-y-auto h-[calc(100%-30px)]">
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
-            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('??')">??</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('😎')">😎</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('👍')">👍</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('😁')">😁</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('😂')">😂</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('🙌')">🙌</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('✔')">✔</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('😜')">😜</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('😒')">😒</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('😢')">😢</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('😘')">😘</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('❤')">❤</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('😃')">😃</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('😊')">😊</span>
+            <span class="cursor-pointer hover:bg-gray-100 p-1 rounded transition duration-100" onclick="insertEmoji('✌')">✌</span>
         </div>
     </div>
 
@@ -756,7 +756,7 @@ async function uploadFileAndSendMessage(event) {
 
         async function createGroup(groupName, invitedUsernames) {
             try {
-                const memberUsernames = invitedUserNames.split(',').map(u => u.trim()).filter(u => u.length > 0);
+                const memberUsernames = invitedUsernames.split(',').map(u => u.trim()).filter(u => u.length > 0);
                 if (!memberUsernames.includes(currentUsername)) {
                     memberUsernames.unshift(currentUsername);
                 }
