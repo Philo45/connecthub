@@ -324,7 +324,7 @@ async function resetPassword(userId, newHashedPassword) {
 // Create a new group and return the group_id
 async function createGroup(name, creatorId) {
     const [result] = await pool.query(
-        'INSERT INTO groups (group_name, creator_id) VALUES (?, ?)',
+        'INSERT INTO \'groups\' (group_name, creator_id) VALUES (?, ?)',
         [name, creatorId]
     );
     return result.insertId;
