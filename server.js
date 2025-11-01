@@ -80,24 +80,20 @@ const io = socketIo(server, {
 
 const saltRounds = 10;
 
-// ... (Nodemailer Configuration)
+// server.js: Nodemailer Configuration (Corrected for SendGrid)
+
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587, 
-    secure: false,
+    host: process.env.SMTP_HOST, // Now 'smtp.sendgrid.net'
+    port: process.env.SMTP_PORT, // Now '587'
+    secure: false, // MUST be false for port 587
     auth: {
-        user: process.env.EMAIL_USER,
-        // CRITICAL: Must use a Google App Password here, not a regular password
-        pass: process.env.EMAIL_PASSWORD, 
+        user: process.env.SMTP_USER, // Now 'apikey'
+        pass: process.env.SMTP_PASS, // Now your SendGrid API Key
     },
-    // Add timeouts to prevent generic 'ETIMEDOUT' by allowing more time
-    connectionTimeout: 10000, // 10 seconds
-    greetingTimeout: 5000,    // 5 seconds
-    // You can remove or keep the tls block, as 'secure: true' handles the security layer
-    // For maximal compatibility, you can keep the tls block:
-    tls: {
-        rejectUnauthorized: false
-    }
+    // The following are optional but good practice for robustness
+    requireTLS: true, // Forces TLS security negotiation
+    connectionTimeout: 10000,
+    greetingTimeout: 5000,
 });
 // -------------------------------------------------------------------
 // --- File Upload Configuration (Multer) ---
