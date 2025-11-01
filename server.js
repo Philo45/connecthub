@@ -508,7 +508,8 @@ app.post('/api/groups', async (req, res) => {
 
         // 3. Create the group in the database
         const groupId = await db.createGroup(groupName, creatorId);
-
+        await db.addGroupMember(groupId, creatorId);
+        
         // 4. Handle member invitations
         if (Array.isArray(invitedUsernames) && invitedUsernames.length > 0) {
 
