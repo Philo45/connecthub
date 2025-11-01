@@ -83,8 +83,8 @@ const saltRounds = 10;
 // ... (Nodemailer Configuration)
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465, 
-    secure: true, // true for 465
+    port: 587, 
+    secure: false,
     auth: {
         user: process.env.EMAIL_USER,
         // CRITICAL: Must use a Google App Password here, not a regular password
@@ -509,7 +509,7 @@ app.post('/api/groups', async (req, res) => {
         // 3. Create the group in the database
         const groupId = await db.createGroup(groupName, creatorId);
         await db.addGroupMember(groupId, creatorId);
-        
+
         // 4. Handle member invitations
         if (Array.isArray(invitedUsernames) && invitedUsernames.length > 0) {
 
