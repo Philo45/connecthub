@@ -608,7 +608,7 @@
 
         function showCallUI(recipientName, callType, isIncoming) {
             if (callState.active) {
-                showToast("Already in a call or calling.", 'error', 4000); // Updated duration
+                showToast("Already in a call or calling.", 'error');
                 return;
             }
 
@@ -630,12 +630,10 @@
                 acceptButton.classList.remove('hidden');
                 acceptButton.onclick = () => {
                     // Placeholder for WebRTC answer logic
-                    // NOTE: The actual WebRTC implementation (peer connection, track negotiation) must be added here.
                     showToast(`Answering ${callType} call from ${recipientName}. (WebRTC setup next)`, 'success', 5000);
                     // Hide Accept button and update status to Active
                     acceptButton.classList.add('hidden');
                     callStatusTextEl.textContent = `${typeText} Call Active`;
-                    // **[WebRTC: Start receiving media, send answer SDP]**
                 };
                 hangupButton.onclick = () => hangUpCall(true); // Callee hangs up
             } else {
@@ -651,7 +649,7 @@
 
         function hideCallUI(message = null, type = 'info') {
             if (message) {
-                showToast(message, type, 4000); // Updated duration
+                showToast(message, type, 4000);
             }
             callModal.classList.add('hidden');
             callState = { active: false, recipient: null, type: null, isIncoming: false };
@@ -665,13 +663,12 @@
             let recipientUsername;
             let message;
             
-            // Determine who to notify
             if (isIncomingCall) {
-                // If the user is the recipient who is hanging up/declining: notify the caller (callState.recipient)
+                // If it's an incoming call, the recipient is the person who called
                 recipientUsername = callState.recipient;
                 message = "Call declined.";
             } else {
-                // If the user is the caller who is hanging up/canceling: notify the callee (currentRecipient)
+                // If it's an outgoing call, the recipient is the person being called
                 recipientUsername = currentRecipient;
                 message = "Call ended.";
             }
@@ -679,8 +676,6 @@
             // Emit signal to the other user
             socket.emit(eventName, { to: recipientUsername, from: currentUsername });
             
-            // **[WebRTC: Close peer connection, stop media tracks]**
-
             hideCallUI(message, 'info');
         }
 
@@ -690,7 +685,7 @@
          */
         async function startVoiceCall() {
             if (!currentRecipient || groupsList.some(g => g.group_id.toString() === currentRecipient)) {
-                showToast("Voice calls are only supported for private chats.", 'error', 4000); // Updated duration
+                showToast("Voice calls are only supported for private chats.", 'error',4000);
                 return;
             }
 
@@ -704,7 +699,6 @@
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
 
                 // If successful, stop the local tracks immediately as we only needed permission for now
-                // NOTE: In a full WebRTC implementation, you would save this stream to be used in the RTCPeerConnection.
                 stream.getTracks().forEach(track => track.stop());
 
                 // 2. Show Call UI
@@ -719,11 +713,10 @@
                 
                 // 3. Initiate Call Signaling
                 socket.emit('call:start_voice', callPayload, (response) => {
-                    // This callback handles server-side errors if needed.
+                    // This callback handles server-side errors if needed, but not common for fire-and-forget.
                     if (response && response.success === false) {
                          hideCallUI(`Call failed: ${response.message}`, 'error');
                     }
-                    // **[WebRTC: Create peer connection, add tracks, create offer SDP, send offer via socket]**
                 });
 
             } catch (err) {
@@ -734,7 +727,7 @@
                 } else if (err.name === "NotFoundError") {
                     message = "No microphone found on this device.";
                 }
-                showToast(`Voice Call Failed: ${message}`, 'error', 4000); // Updated duration
+                showToast(`Voice Call Failed: ${message}`, 'error', 4000);
                 voiceCallBtn.disabled = false;
             }
         }
@@ -744,7 +737,7 @@
          */
         async function startVideoCall() {
             if (!currentRecipient || groupsList.some(g => g.group_id.toString() === currentRecipient)) {
-                showToast("Video calls are only supported for private chats.", 'error', 4000); // Updated duration
+                showToast("Video calls are only supported for private chats.", 'error',4000);
                 return;
             }
 
@@ -758,7 +751,6 @@
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
                 
                 // If successful, stop the local tracks immediately as we only needed permission for now
-                // NOTE: In a full WebRTC implementation, you would save this stream to be used in the RTCPeerConnection.
                 stream.getTracks().forEach(track => track.stop());
 
                 // 2. Show Call UI
@@ -777,7 +769,6 @@
                      if (response && response.success === false) {
                          hideCallUI(`Call failed: ${response.message}`, 'error');
                     }
-                    // **[WebRTC: Create peer connection, add tracks, create offer SDP, send offer via socket]**
                 });
 
             } catch (err) {
@@ -788,7 +779,7 @@
                 } else if (err.name === "NotFoundError") {
                     message = "No camera or microphone found on this device.";
                 }
-                showToast(`Video Call Failed: ${message}`, 'error', 4000); // Updated duration
+                showToast(`Video Call Failed: ${message}`, 'error', 4000);
                 videoCallBtn.disabled = false;
             }
         }
@@ -925,7 +916,7 @@
             }
         }
 
-        // --- UTILITY FUNCTIONS (Updated showToast duration) ---
+        // --- UTILITY FUNCTIONS (Unchanged) ---
         function showToast(message, type = 'success', duration = 3000) {
             const colors = {
                 success: { bg: 'bg-green-500', icon: 'fa-check-circle' },
@@ -970,10 +961,6 @@
             const date = new Date(timestamp);
             const now = new Date();
             const diffDays = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
-
-            if (isNaN(date.getTime())) {
-                return 'Invalid time'; // Handle invalid date/timestamp
-            }
 
             if (diffDays < 1) {
                 // Less than 24 hours: just time
@@ -1187,7 +1174,7 @@
             return true;
         }
 
-        // --- RENDERING FUNCTIONS (Updated renderMessages) ---
+        // --- RENDERING FUNCTIONS (Unchanged) ---
 
         function getFileIcon(mimeType) {
             if (mimeType.startsWith('image/')) {
@@ -1251,13 +1238,12 @@
         }
 
 
-/**
- * Renders the full message history.
- * @param {Array<Object>} messages - The list of message objects.
- * @param {boolean} isGroup - True if the current chat is a group chat.
- */
+        // --- RENDERING FUNCTIONS ---
+
+// IMPORTANT: Ensure this utility function is present in your <script> tag
+// function formatMessageTimestamp(timestamp) { ... }
+
 function renderMessages(messages, isGroup) {
-    // Check if the user was near the bottom before rendering
     const wasAtBottom = chatHistory.scrollHeight - chatHistory.clientHeight <= chatHistory.scrollTop + 20; // Tolerance
 
     chatHistory.innerHTML = '';
@@ -1277,12 +1263,12 @@ function renderMessages(messages, isGroup) {
         const senderUsername = msg.sender || msg.sender_username || msg.username;
         const isMine = senderUsername === currentUsername;
         
-        // Use the found senderUsername for display in group chats for RECIEVED messages
-        const senderDisplay = isGroup && !isMine && senderUsername ? `<p class="text-xs font-semibold mb-1 text-gray-500">${senderUsername}</p>` : '';
+        // Use the found senderUsername for display in group chats
+        const senderDisplay = isGroup && !isMine ? `<p class="text-xs font-semibold mb-1 text-gray-500">${senderUsername}</p>` : '';
         
         // 🟢 FIX 2: Use robust checks for timestamp value (to prevent "Invalid Date")
         const timestampValue = msg.timestamp || msg.message_timestamp || msg.created_at;
-        const time = formatMessageTimestamp(timestampValue); // formatMessageTimestamp handles invalid values
+        const time = timestampValue ? formatMessageTimestamp(timestampValue) : 'Unknown time';
 
         const containerClass = isMine ? 'message-container sent' : 'message-container received';
         const bubbleClass = 'message-bubble';
@@ -1326,7 +1312,6 @@ function renderMessages(messages, isGroup) {
         `;
     });
 
-    // Scroll to bottom if user was near bottom before load
     if (wasAtBottom) {
         chatHistory.scrollTop = chatHistory.scrollHeight;
     }
@@ -1441,8 +1426,8 @@ function renderMessages(messages, isGroup) {
                 videoCallBtn.classList.remove('opacity-50', 'pointer-events-none');
                 addMemberBtn.classList.add('hidden');
             } else {
-                voiceCallBtn.disabled = true; // Disabled for group calls in this implementation
-                videoCallBtn.disabled = true; // Disabled for group calls
+                voiceCallBtn.disabled = false;
+                videoCallBtn.disabled = true; // Disable video for groups
                 videoCallBtn.classList.add('opacity-50', 'pointer-events-none');
                 addMemberBtn.classList.remove('hidden');
             }
@@ -1611,7 +1596,7 @@ function renderMessages(messages, isGroup) {
         });
 
 
-        // --- SOCKET.IO LISTENERS (Updated with Call Signaling and Toast duration) ---
+        // --- SOCKET.IO LISTENERS (Updated with Call Signaling) ---
         socket.on('connect', () => {
             if (currentUsername) {
                 socket.emit('user:set_online', currentUsername);
@@ -1626,7 +1611,7 @@ function renderMessages(messages, isGroup) {
         socket.on('groups:new_group_created', (groupData) => {
             console.log("New group creation notification received. Refreshing groups.");
             fetchGroups();
-            showToast(`You were added to new group: ${groupData.groupName}`, 'info', 4000); // Updated duration
+            showToast(`You were added to new group: ${groupData.groupName}`, 'info', 5000);
         });
 
         socket.on('chat:new_message', (data) => {
@@ -1636,7 +1621,7 @@ function renderMessages(messages, isGroup) {
             } else if (data.recipient === currentUsername) {
                 // If a message for me, update unread count
                 unreadCounts[data.sender] = (unreadCounts[data.sender] || 0) + 1;
-                showToast(`New private message from ${data.sender}!`, 'info', 4000); // Updated duration
+                showToast(`New private message from ${data.sender}!`, 'info', 4000);
                 renderSidebarContent();
             }
         });
@@ -1649,7 +1634,7 @@ function renderMessages(messages, isGroup) {
             } else {
                 unreadCounts[groupId] = (unreadCounts[groupId] || 0) + 1;
                 const group = groupsList.find(g => g.group_id.toString() === groupId) || {group_name: `Group ${groupId}`};
-                showToast(`New message in group "${group.group_name}" from ${data.sender}!`, 'info', 4000); // Updated duration
+                showToast(`New message in group "${group.group_name}" from ${data.sender}!`, 'info', 4000);
                 renderSidebarContent();
             }
         });
@@ -1662,7 +1647,7 @@ function renderMessages(messages, isGroup) {
             if (callState.active) {
                 // Busy: immediately send a busy signal or end call
                 socket.emit('call:end', { to: data.from, from: currentUsername });
-                showToast(`Missed incoming ${data.type} call from ${data.from}. (Busy)`, 'error', 4000); // Updated duration
+                showToast(`Missed incoming ${data.type} call from ${data.from}. (Busy)`, 'error', 5000);
                 return;
             }
             showCallUI(data.from, data.type, true);
@@ -1681,7 +1666,7 @@ function renderMessages(messages, isGroup) {
                 hideCallUI(`Call ended by ${data.from}.`, 'info');
             } else {
                 // This might be a busy signal or a general notification
-                showToast(`Call status update: ${data.from} ended the call.`, 'info', 4000); // Updated duration
+                showToast(`Call status update: ${data.from} ended the call.`, 'info', 3000);
             }
         });
     </script>
