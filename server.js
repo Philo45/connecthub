@@ -1,4 +1,4 @@
-// --- / --- server.js (Production Ready with Group Chat & File Upload) ---
+// --- / --- server.js (Production Ready with Group Chat, File Upload, & Voice/Video Call Signaling) ---
 
 const express = require('express');
 const http = require('http');
@@ -51,12 +51,16 @@ const {
     // AI CHAT FUNCTIONS (NEW)
     saveAIChatMessage,
     getAIChatHistory,
+    // NOTE: This function is required by the POST /api/submit-concern route.
+    saveSupportTicket,
     
 } = require('./db');
 
 // --- Configuration Constants ---
 const PORT = process.env.PORT || 3000;
 const APP_URL = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
+// Assuming CLIENT_URL is needed for the reset link, defining it here for safety
+const CLIENT_URL = process.env.CLIENT_URL || APP_URL; 
 const app = express();
 const server = http.createServer(app);
 
@@ -138,7 +142,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Route 2: Private Chat Page
+// Route 2: Private Chat Page (NOW SUPPORTS VOICE/VIDEO CALLS)
 app.get('/chat', (req, res) => {
     res.sendFile(path.join(__dirname, 'chat.html'));
 });
@@ -917,7 +921,7 @@ app.post('/api/submit-concern', async (req, res) => {
 
         // Save the ticket to the database (Requires implementation in db.js)
         // This function is now correctly imported at the top of the file.
-       const ticketId = await db.saveSupportTicket(userId, username, email, concern);
+       const ticketId = await saveSupportTicket(userId, username, email, concern);
         console.log(`Saved support ticket ID: ${ticketId}`);
         // -----------------------------------
 
@@ -1083,7 +1087,7 @@ app.post('/api/messages/read/:recipientUsername', async (req, res) => {
 });
 
 // ------------------------------------------
-// --- Socket.io Logic (UPDATED for Group Rooms) ---
+// --- Socket.io Logic (UPDATED for Group Rooms & Voice/Video Call) ---
 // ------------------------------------------
 
 // Map: { username: socket.id }
@@ -1197,6 +1201,82 @@ io.on('connection', (socket) => {
             console.error('Socket error during group:send_message:', error.message);
         }
     });
+
+    // ----------------------------------------------------
+    // --- NEW: WebRTC Signaling for Voice/Video Calls (Private) ---
+    // ----------------------------------------------------
+
+    // 1. Initiate Call: Sender requests a call
+    socket.on('call:start', (data) => {
+        // Data: { to: recipientUsername, from: senderUsername }
+        const { to, from } = data;
+        const recipientSocketId = onlineUsers[to];
+
+        if (recipientSocketId) {
+            // Emit to recipient that a call is incoming.
+            io.to(recipientSocketId).emit('call:incoming', { from });
+            console.log(`Call started from ${from} to ${to}`);
+        } else {
+            // Optionally, notify the caller if the user is not online
+            io.to(onlineUsers[from]).emit('call:unavailable', { to });
+        }
+    });
+
+    // 2. Offer: Caller sends the WebRTC offer (SDP)
+    socket.on('call:offer', (data) => {
+        // Data: { to: recipientUsername, offer: sdp, from: senderUsername }
+        const { to, offer, from } = data;
+        const recipientSocketId = onlineUsers[to];
+
+        if (recipientSocketId) {
+            // Forward the offer to the recipient
+            io.to(recipientSocketId).emit('call:offer', { offer, from });
+            console.log(`Relayed offer from ${from} to ${to}`);
+        }
+    });
+
+    // 3. Answer: Callee sends the WebRTC answer (SDP)
+    socket.on('call:answer', (data) => {
+        // Data: { to: callerUsername, answer: sdp, from: calleeUsername }
+        const { to, answer, from } = data;
+        const callerSocketId = onlineUsers[to]; // 'to' is the original caller here
+
+        if (callerSocketId) {
+            // Forward the answer back to the original caller
+            io.to(callerSocketId).emit('call:answer', { answer, from });
+            console.log(`Relayed answer from ${from} to ${to}`);
+        }
+    });
+
+    // 4. ICE Candidate Exchange
+    socket.on('ice:candidate', (data) => {
+        // Data: { to: otherUserUsername, candidate: iceCandidate, from: selfUsername }
+        const { to, candidate, from } = data;
+        const otherUserSocketId = onlineUsers[to];
+
+        if (otherUserSocketId) {
+            // Forward the ICE candidate to the other peer
+            io.to(otherUserSocketId).emit('ice:candidate', { candidate, from });
+            console.log(`Relayed ICE candidate from ${from} to ${to}`);
+        }
+    });
+
+    // 5. End Call
+    socket.on('call:end', (data) => {
+        // Data: { to: otherUserUsername, from: selfUsername }
+        const { to, from } = data;
+        const otherUserSocketId = onlineUsers[to];
+
+        if (otherUserSocketId) {
+            // Notify the other user that the call has ended
+            io.to(otherUserSocketId).emit('call:ended', { from });
+            console.log(`Call ended between ${from} and ${to}`);
+        }
+    });
+
+    // ----------------------------------------------------
+    // --- END NEW: WebRTC Signaling ---
+    // ----------------------------------------------------
 
 
     // --- Disconnection ---

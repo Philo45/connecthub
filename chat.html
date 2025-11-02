@@ -431,7 +431,17 @@
                     <h2 id="recipient-name" class="text-xl font-semibold text-gray-800 ml-3 truncate">Select a user or group to chat</h2>
                 </div>
 
-                <button id="add-member-btn" class="hidden p-2 rounded-full text-primary-color hover:bg-gray-100 transition duration-150 flex-shrink-0"
+                <button type="button" id="voice-call-btn" class="p-2 rounded-full text-primary-color hover:bg-gray-100 transition duration-150 flex-shrink-0 disabled:opacity-50 disabled:pointer-events-none"
+                        onclick="startVoiceCall()" title="Start Voice Call" disabled>
+                    <i class="fa fa-phone text-xl"></i>
+                </button>
+
+                <button type="button" id="video-call-btn" class="ml-2 p-2 rounded-full text-primary-color hover:bg-gray-100 transition duration-150 flex-shrink-0 disabled:opacity-50 disabled:pointer-events-none"
+                        onclick="startVideoCall()" title="Start Video Call" disabled>
+                    <i class="fa fa-video text-xl"></i>
+                </button>
+
+                <button id="add-member-btn" class="hidden ml-2 p-2 rounded-full text-primary-color hover:bg-gray-100 transition duration-150 flex-shrink-0"
                         onclick="showAddMemberModal()" title="Add Members to Group">
                     <i class="fa fa-user-plus text-xl"></i>
                 </button>
@@ -506,6 +516,10 @@
         const fileButton = document.getElementById('file-button');
         const messageForm = document.getElementById('message-form');
 
+        // NEW CALL BUTTONS
+        const voiceCallBtn = document.getElementById('voice-call-btn');
+        const videoCallBtn = document.getElementById('video-call-btn');
+
         let registeredUserList = []; // Full list of all users from the DB
         let onlineUsernamesList = []; // Array of currently connected usernames (Socket.IO)
         let unreadCounts = {}; // Map: { username/groupId: count }
@@ -514,6 +528,93 @@
 
         // Initialize Socket.IO connection
         const socket = io();
+
+
+        // --- NEW CALL FUNCTIONS ---
+
+        /**
+         * Starts a Voice Call. This is a placeholder for real WebRTC/Call initiation logic.
+         */
+        function startVoiceCall() {
+            if (!currentRecipient) {
+                showToast("Please select a recipient first.", 'error');
+                return;
+            }
+
+            const recipientName = recipientNameEl.textContent;
+            const isGroup = groupsList.some(g => g.group_id.toString() === currentRecipient);
+            const chatType = isGroup ? 'Group' : 'Private';
+
+            showToast(`Initiating Voice Call with ${recipientName}...`, 'info', 5000);
+            voiceCallBtn.disabled = true; // Disable while calling
+
+            const callPayload = {
+                from: currentUsername,
+                to: currentRecipient,
+                isGroup: isGroup,
+                callType: 'voice'
+            };
+
+            // In a real application, this would emit a WebRTC signaling event.
+            socket.emit('call:start_voice', callPayload, (response) => {
+                // Placeholder response handler
+                if (response && response.success) {
+                     showToast(`${chatType} Call signal sent! Awaiting response from ${recipientName}.`, 'success', 3000);
+                     // Logic to display call UI, streaming media, etc.
+                } else {
+                     showToast(`${chatType} Call failed to signal: ${response ? response.message : 'Server error.'}`, 'error', 5000);
+                     voiceCallBtn.disabled = false; // Re-enable on failure
+                }
+            });
+
+            // Re-enable after a timeout for demonstration, as we lack a real call end event.
+            setTimeout(() => { voiceCallBtn.disabled = false; }, 10000);
+        }
+
+        /**
+         * Starts a Video Call. This is a placeholder for real WebRTC/Call initiation logic.
+         */
+        function startVideoCall() {
+            if (!currentRecipient) {
+                showToast("Please select a recipient first.", 'error');
+                return;
+            }
+
+            const recipientName = recipientNameEl.textContent;
+            const isGroup = groupsList.some(g => g.group_id.toString() === currentRecipient);
+
+            // Group video calls are often disabled or not supported for 1:1 apps
+            if (isGroup) {
+                showToast("Video calls are currently only supported for private chats.", 'error', 5000);
+                return;
+            }
+
+            showToast(`Initiating Video Call with ${recipientName}...`, 'info', 5000);
+            videoCallBtn.disabled = true; // Disable while calling
+
+            const callPayload = {
+                from: currentUsername,
+                to: currentRecipient,
+                isGroup: false,
+                callType: 'video'
+            };
+
+            // In a real application, this would emit a WebRTC signaling event.
+            socket.emit('call:start_video', callPayload, (response) => {
+                 // Placeholder response handler
+                if (response && response.success) {
+                     showToast(`Video call signal sent! Awaiting response from ${recipientName}.`, 'success', 3000);
+                     // Logic to display call UI, streaming media, etc.
+                } else {
+                     showToast(`Video call failed to signal: ${response ? response.message : 'Server error.'}`, 'error', 5000);
+                     videoCallBtn.disabled = false; // Re-enable on failure
+                }
+            });
+
+             // Re-enable after a timeout for demonstration
+             setTimeout(() => { videoCallBtn.disabled = false; }, 10000);
+        }
+
 
         // --- NEW FILE & EMOJI UI FUNCTIONS ---
 
@@ -552,6 +653,9 @@
             sendButton.disabled = disable;
             emojiButton.disabled = disable;
             fileButton.disabled = disable;
+            // NEW: Call buttons
+            voiceCallBtn.disabled = disable;
+            videoCallBtn.disabled = disable;
         }
 
         /**
@@ -1221,6 +1325,20 @@ async function uploadFileAndSendMessage(event) {
 
             // Enable input and send button
             toggleControls(false);
+
+            // NEW: Control call buttons visibility/state based on chat type
+            if (type === 'user') {
+                // Private chat: Both calls enabled
+                voiceCallBtn.disabled = false;
+                videoCallBtn.disabled = false;
+                videoCallBtn.classList.remove('opacity-50', 'pointer-events-none');
+            } else {
+                // Group chat: Only voice call is generally supported/enabled
+                voiceCallBtn.disabled = false;
+                videoCallBtn.disabled = true; // Disable video for groups
+                // Visually indicate it's disabled for groups
+                videoCallBtn.classList.add('opacity-50', 'pointer-events-none');
+            }
 
             // Toggle visibility of the Add Member button
             if (type === 'group') {
