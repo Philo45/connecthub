@@ -209,18 +209,6 @@
     .toast-enter-active, .toast-leave-active { transition: opacity 0.3s, transform 0.3s; }
     .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(20px); }
 
-    /* NEW: File Picker Modal Styles */
-    .file-picker-item {
-        display: flex;
-        align-items: center;
-        padding: 10px;
-        border-radius: 8px;
-        transition: background-color 0.15s;
-    }
-    .file-picker-item:hover {
-        background-color: #f3f4f6;
-    }
-
     /* File bubble styling */
     .file-bubble {
         display: flex;
@@ -250,10 +238,81 @@
         text-decoration: underline;
     }
 
+    /* --- NEW CALL MODAL STYLES --- */
+    #call-modal {
+        /* Use a higher z-index than other modals (e.g., 120 is used for others) */
+        z-index: 200;
+        background-color: #000000; /* Black background */
+        transition: opacity 0.3s ease;
+    }
+
+    #call-ui-content {
+        /* Use a dark, slightly transparent background for the UI elements */
+        background-color: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(5px);
+    }
+    /* Call Button size and color for Hangup/Accept */
+    .call-btn {
+        width: 80px;
+        height: 80px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        color: white;
+        font-size: 36px;
+        transition: opacity 0.2s, transform 0.2s;
+    }
+    .call-btn:hover {
+        transform: scale(1.05);
+    }
+    #hangup-button {
+        background-color: #EF4444; /* Red-500 */
+    }
+    #accept-button {
+        background-color: #10B981; /* Green-500 */
+    }
+
+    .caller-avatar {
+        width: 120px;
+        height: 120px;
+        font-size: 48px;
+    }
+    .status-text {
+        font-weight: 500;
+        text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    }
+
 </style>
 </head>
 <body class="min-h-screen flex flex-col">
 
+    <div id="call-modal" class="hidden fixed inset-0 flex items-center justify-center p-4">
+        <div id="call-ui-content" class="absolute inset-0 flex flex-col items-center justify-center p-8 text-white">
+
+            <div class="caller-avatar rounded-full bg-gray-500 flex items-center justify-center font-bold mb-6">
+                <span id="call-recipient-initial">R</span>
+            </div>
+
+            <h2 id="call-recipient-name" class="text-4xl font-bold mb-2 text-center text-shadow-lg">Recipient Name</h2>
+
+            <p id="call-status-text" class="status-text text-xl mb-12 text-gray-200">Calling...</p>
+
+
+            <div id="call-controls" class="flex space-x-10">
+                <button id="accept-button" class="call-btn hidden" title="Answer Call">
+                    <i class="fa fa-phone"></i>
+                </button>
+
+                <button id="hangup-button" class="call-btn" onclick="hangUpCall(true)" title="Hang Up">
+                    <i class="fa fa-phone-slash"></i>
+                </button>
+            </div>
+
+            <div id="video-streams-container" class="mt-8">
+                </div>
+        </div>
+    </div>
     <div id="create-group-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-[120] flex items-center justify-center p-4">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
             <h3 class="text-2xl font-bold mb-4 text-gray-800 border-b pb-2">Create New Group</h3>
@@ -520,6 +579,21 @@
         const voiceCallBtn = document.getElementById('voice-call-btn');
         const videoCallBtn = document.getElementById('video-call-btn');
 
+        // NEW CALL UI ELEMENTS
+        const callModal = document.getElementById('call-modal');
+        const callRecipientInitialEl = document.getElementById('call-recipient-initial');
+        const callRecipientNameEl = document.getElementById('call-recipient-name');
+        const callStatusTextEl = document.getElementById('call-status-text');
+        const acceptButton = document.getElementById('accept-button');
+        const hangupButton = document.getElementById('hangup-button');
+        
+        let callState = {
+            active: false,
+            recipient: null,
+            type: null,
+            isIncoming: false
+        };
+
         let registeredUserList = []; // Full list of all users from the DB
         let onlineUsernamesList = []; // Array of currently connected usernames (Socket.IO)
         let unreadCounts = {}; // Map: { username/groupId: count }
@@ -530,22 +604,94 @@
         const socket = io();
 
 
-        // --- NEW CALL FUNCTIONS (UPDATED FOR PERMISSION REQUESTS) ---
+        // --- NEW CALL UI & LOGIC FUNCTIONS ---
+
+        function showCallUI(recipientName, callType, isIncoming) {
+            if (callState.active) {
+                showToast("Already in a call or calling.", 'error');
+                return;
+            }
+
+            callState = {
+                active: true,
+                recipient: recipientName,
+                type: callType,
+                isIncoming: isIncoming
+            };
+
+            callRecipientNameEl.textContent = recipientName;
+            callRecipientInitialEl.textContent = recipientName[0].toUpperCase();
+            
+            // Set status text and button visibility based on call type (Voice/Video)
+            const typeText = callType.charAt(0).toUpperCase() + callType.slice(1);
+
+            if (isIncoming) {
+                callStatusTextEl.textContent = `Incoming ${typeText} Call...`;
+                acceptButton.classList.remove('hidden');
+                acceptButton.onclick = () => {
+                    // Placeholder for WebRTC answer logic
+                    showToast(`Answering ${callType} call from ${recipientName}. (WebRTC setup next)`, 'success', 5000);
+                    // Hide Accept button and update status to Active
+                    acceptButton.classList.add('hidden');
+                    callStatusTextEl.textContent = `${typeText} Call Active`;
+                };
+                hangupButton.onclick = () => hangUpCall(true); // Callee hangs up
+            } else {
+                callStatusTextEl.textContent = `Calling ${recipientName} (${typeText} Call)...`;
+                acceptButton.classList.add('hidden'); // Only receiver needs accept button
+                hangupButton.onclick = () => hangUpCall(false); // Caller cancels call
+            }
+
+            callModal.classList.remove('hidden');
+            // Disable chat controls while call UI is active
+            toggleControls(true); 
+        }
+
+        function hideCallUI(message = null, type = 'info') {
+            if (message) {
+                showToast(message, type, 4000);
+            }
+            callModal.classList.add('hidden');
+            callState = { active: false, recipient: null, type: null, isIncoming: false };
+            toggleControls(false); // Re-enable chat controls
+        }
+
+        function hangUpCall(isIncomingCall) {
+            if (!callState.active) return;
+            
+            const eventName = 'call:end';
+            let recipientUsername;
+            let message;
+            
+            if (isIncomingCall) {
+                // If it's an incoming call, the recipient is the person who called
+                recipientUsername = callState.recipient;
+                message = "Call declined.";
+            } else {
+                // If it's an outgoing call, the recipient is the person being called
+                recipientUsername = currentRecipient;
+                message = "Call ended.";
+            }
+
+            // Emit signal to the other user
+            socket.emit(eventName, { to: recipientUsername, from: currentUsername });
+            
+            hideCallUI(message, 'info');
+        }
+
 
         /**
-         * Starts a Voice Call. Replaces placeholder with real permission request and signaling.
+         * Starts a Voice Call.
          */
         async function startVoiceCall() {
-            if (!currentRecipient) {
-                showToast("Please select a recipient first.", 'error');
+            if (!currentRecipient || groupsList.some(g => g.group_id.toString() === currentRecipient)) {
+                showToast("Voice calls are only supported for private chats.", 'error');
                 return;
             }
 
             const recipientName = recipientNameEl.textContent;
-            const isGroup = groupsList.some(g => g.group_id.toString() === currentRecipient);
-            const chatType = isGroup ? 'Group' : 'Private';
-
-            voiceCallBtn.disabled = true; // Disable while attempting call
+            
+            voiceCallBtn.disabled = true;
 
             try {
                 // 1. Request Microphone Permission
@@ -555,24 +701,21 @@
                 // If successful, stop the local tracks immediately as we only needed permission for now
                 stream.getTracks().forEach(track => track.stop());
 
-                showToast(`Microphone permission granted! Initiating Voice Call with ${recipientName}...`, 'success', 3000);
+                // 2. Show Call UI
+                showCallUI(recipientName, 'voice', false);
 
                 const callPayload = {
                     from: currentUsername,
                     to: currentRecipient,
-                    isGroup: isGroup,
+                    isGroup: false,
                     callType: 'voice'
                 };
                 
-                // 2. Initiate Call Signaling (as per server.js update)
+                // 3. Initiate Call Signaling
                 socket.emit('call:start_voice', callPayload, (response) => {
-                    // Handle actual signaling response from server.js
-                    if (response && response.success) {
-                         showToast(`${chatType} Call signal sent! Awaiting response from ${recipientName}.`, 'success', 3000);
-                         // In a full WebRTC app, this is where you'd start setting up the PeerConnection.
-                    } else {
-                         showToast(`${chatType} Call failed to signal: ${response ? response.message : 'Server error.'}`, 'error', 5000);
-                         voiceCallBtn.disabled = false; // Re-enable on signaling failure
+                    // This callback handles server-side errors if needed, but not common for fire-and-forget.
+                    if (response && response.success === false) {
+                         hideCallUI(`Call failed: ${response.message}`, 'error');
                     }
                 });
 
@@ -585,29 +728,22 @@
                     message = "No microphone found on this device.";
                 }
                 showToast(`Voice Call Failed: ${message}`, 'error', 8000);
-                voiceCallBtn.disabled = false; // Re-enable on media access failure
+                voiceCallBtn.disabled = false;
             }
         }
 
         /**
-         * Starts a Video Call. Replaces placeholder with real permission request and signaling.
+         * Starts a Video Call.
          */
         async function startVideoCall() {
-            if (!currentRecipient) {
-                showToast("Please select a recipient first.", 'error');
+            if (!currentRecipient || groupsList.some(g => g.group_id.toString() === currentRecipient)) {
+                showToast("Video calls are only supported for private chats.", 'error');
                 return;
             }
 
             const recipientName = recipientNameEl.textContent;
-            const isGroup = groupsList.some(g => g.group_id.toString() === currentRecipient);
-
-            // Group video calls are often disabled or not supported for 1:1 apps
-            if (isGroup) {
-                showToast("Video calls are currently only supported for private chats.", 'error', 5000);
-                return;
-            }
-
-            videoCallBtn.disabled = true; // Disable while attempting call
+            
+            videoCallBtn.disabled = true;
 
             try {
                 // 1. Request Camera and Microphone Permission
@@ -617,7 +753,9 @@
                 // If successful, stop the local tracks immediately as we only needed permission for now
                 stream.getTracks().forEach(track => track.stop());
 
-                showToast(`Permissions granted! Initiating Video Call with ${recipientName}...`, 'success', 3000);
+                // 2. Show Call UI
+                showCallUI(recipientName, 'video', false);
+
 
                 const callPayload = {
                     from: currentUsername,
@@ -626,14 +764,10 @@
                     callType: 'video'
                 };
                 
-                // 2. Initiate Call Signaling (as per server.js update)
+                // 3. Initiate Call Signaling
                 socket.emit('call:start_video', callPayload, (response) => {
-                     // Handle actual signaling response from server.js
-                    if (response && response.success) {
-                         showToast(`Video call signal sent! Awaiting response from ${recipientName}.`, 'success', 3000);
-                    } else {
-                         showToast(`Video call failed to signal: ${response ? response.message : 'Server error.'}`, 'error', 5000);
-                         videoCallBtn.disabled = false; // Re-enable on signaling failure
+                     if (response && response.success === false) {
+                         hideCallUI(`Call failed: ${response.message}`, 'error');
                     }
                 });
 
@@ -646,12 +780,12 @@
                     message = "No camera or microphone found on this device.";
                 }
                 showToast(`Video Call Failed: ${message}`, 'error', 8000);
-                videoCallBtn.disabled = false; // Re-enable on media access failure
+                videoCallBtn.disabled = false;
             }
         }
 
 
-        // --- NEW FILE & EMOJI UI FUNCTIONS ---
+        // --- NEW FILE & EMOJI UI FUNCTIONS (Unchanged) ---
 
         function toggleEmojiPicker() {
             // Close file picker if open
@@ -682,32 +816,35 @@
             emojiPickerContainer.classList.add('hidden');
         }
 
-        // Disables controls during file upload/send process
+        // Disables controls during file upload/send process or call active
         function toggleControls(disable) {
             messageInput.disabled = disable;
             sendButton.disabled = disable;
             emojiButton.disabled = disable;
             fileButton.disabled = disable;
-            // NEW: Call buttons
-            voiceCallBtn.disabled = disable;
-            videoCallBtn.disabled = disable;
+            // NEW: Call buttons are controlled by `startChat` / `callState` to ensure they enable correctly
+            if (!callState.active) {
+                voiceCallBtn.disabled = disable || (currentRecipient && groupsList.some(g => g.group_id.toString() === currentRecipient));
+                videoCallBtn.disabled = disable || (currentRecipient && groupsList.some(g => g.group_id.toString() === currentRecipient));
+            } else {
+                 voiceCallBtn.disabled = true;
+                 videoCallBtn.disabled = true;
+            }
         }
 
         /**
          * Handles file selection, uploads the file to the server, and sends the message.
-         * @param {Event} event The change event from the file input.
          */
         async function uploadFileAndSendMessage(event) {
             const file = event.target.files[0];
             filePickerContainer.classList.add('hidden');
 
             if (!file || !currentRecipient || !currentUsername) {
-                // Check if the variables are falsy (null, undefined, or empty string "")
                 if (!currentUsername) {
                     showToast('You are not logged in. Please log in to send files.', 'error', 5000);
                 } else if (!currentRecipient) {
                     showToast('Please select a recipient before sending a file.', 'error', 5000);
-                } else { // Fallback for file or other issues
+                } else {
                     showToast('Missing file or chat data.', 'error', 5000);
                 }
                 console.error("Attempted file upload with missing context data.");
@@ -715,27 +852,18 @@
             }
 
             toggleControls(true); // Disable controls
-            // Use a persistent toast for upload
             showToast(`Uploading ${file.name}...`, 'info', 0);
 
             const isGroup = groupsList.some(g => g.group_id.toString() === currentRecipient);
             const content = messageInput.value.trim() || `[File: ${file.name}]`;
 
-            console.log('Current Username:', currentUsername);
-            console.log('Current Recipient:', currentRecipient);
-            console.log('Is Group:', isGroup);
-
             const formData = new FormData();
-            // Assuming backend uses 'file' based on your formData.append('file', file)
             formData.append('file', file);
             formData.append('username', currentUsername);
             formData.append('recipientUsernameOrId', currentRecipient);
             formData.append('isGroup', isGroup.toString());
 
-            // Render an optimistic file message
             renderOptimisticMessage(content, file.name, file.type);
-
-            // Clear message input immediately to remove the caption
             messageInput.value = '';
 
             try {
@@ -748,19 +876,16 @@
                 if (!uploadResponse.ok) {
                     const errorText = await uploadResponse.text();
                     let errorMessage = `HTTP error! status: ${uploadResponse.status} - ${errorText.substring(0, 50)}...`;
-                    // Attempt to parse JSON error message if possible
                     try {
                         const errorJson = JSON.parse(errorText);
                         errorMessage = errorJson.message || errorMessage;
-                    } catch (e) { /* ignore and jumps to catch */ }
+                    } catch (e) { /* ignore */ }
                     throw new Error(errorMessage);
                 }
 
-                // If response is OK, safely parse the JSON
                 const uploadData = await uploadResponse.json();
 
                 if (!uploadData.success || !uploadData.file_id) {
-                    // Handle application-level success: false (if status was 200 but logic failed)
                     throw new Error(uploadData.message || 'File upload failed: No file ID returned.');
                 }
 
@@ -783,11 +908,9 @@
 
             } catch (error) {
                 showToast(`File upload failed! ${error.message}`, 'error', 5000);
-                // On upload failure, revert optimistic UI
                 const optimisticBubble = chatHistory.querySelector('[data-optimistic="true"]');
                 if (optimisticBubble) optimisticBubble.remove();
             } finally {
-                // This is necessary to allow the user to re-select the same file
                 event.target.value = null;
                 toggleControls(false); // Re-enable controls
             }
@@ -1042,21 +1165,16 @@
                 messageType: 'text'
             };
 
-            // This optimistic UI removal logic is now handled by the socket.on('chat:new_message') or fetchMessages
-            // const optimisticBubble = chatHistory.querySelector('[data-optimistic="true"]');
-            // if (optimisticBubble) optimisticBubble.remove();
-
             if (isGroup) {
                 socket.emit('group:send_message', messagePayload);
             } else {
                 socket.emit('chat:send_message', messagePayload);
             }
 
-            // Return true to indicate the message was submitted for sending
             return true;
         }
 
-        // --- RENDERING FUNCTIONS ---
+        // --- RENDERING FUNCTIONS (Unchanged) ---
 
         function getFileIcon(mimeType) {
             if (mimeType.startsWith('image/')) {
@@ -1148,15 +1266,10 @@
                 if (msg.message_type === 'file' && msg.storage_path) {
                     const { icon, color } = getFileIcon(msg.mime_type);
 
-                    // ?? CORRECTED FILE LOGIC STARTS HERE
-                    // This block handles the correct URL construction and preview logic.
-                    // Construct the correct PUBLIC URL
                     const fileUrl = `/uploads/${msg.storage_path}`;
 
-                    // Logic for image preview
                     let filePreview = '';
                     if (msg.mime_type && msg.mime_type.startsWith('image/')) {
-                        // Use the full public URL for the image source
                         filePreview = `<img src="${fileUrl}" alt="${msg.original_filename}" class="max-w-full rounded-lg mb-2 shadow-md" style="max-height: 250px;">`;
                     }
 
@@ -1172,9 +1285,7 @@
                             </div>
                         </div>
                     `;
-                // ?? END OF FILE LOGIC
                 } else {
-                    // Regular text message
                     messageContentHTML = `<p>${msg.content}</p>`;
                 }
 
@@ -1288,7 +1399,7 @@
             });
         }
 
-        // --- CHAT MANAGEMENT (Updated to enable/disable new buttons) ---
+        // --- CHAT MANAGEMENT ---
         function startChat(recipientId, type, recipientName) {
             if (messagePollInterval) clearInterval(messagePollInterval);
             currentRecipient = recipientId.toString();
@@ -1298,18 +1409,15 @@
             // Enable input and send button
             toggleControls(false);
 
-            // NEW: Control call buttons visibility/state based on chat type
+            // Control call buttons visibility/state based on chat type
             if (type === 'user') {
-                // Private chat: Both calls enabled
                 voiceCallBtn.disabled = false;
                 videoCallBtn.disabled = false;
                 videoCallBtn.classList.remove('opacity-50', 'pointer-events-none');
                 addMemberBtn.classList.add('hidden');
             } else {
-                // Group chat: Only voice call is generally supported/enabled
                 voiceCallBtn.disabled = false;
                 videoCallBtn.disabled = true; // Disable video for groups
-                // Visually indicate it's disabled for groups
                 videoCallBtn.classList.add('opacity-50', 'pointer-events-none');
                 addMemberBtn.classList.remove('hidden');
             }
@@ -1327,18 +1435,14 @@
                 Loading messages...
             </p>`;
 
-            // Fetch initial messages and start polling
             fetchMessages();
             messagePollInterval = setInterval(fetchMessages, POLL_RATE);
-            console.log(`Chat started with ${displayName} (${type}). Polling every ${POLL_RATE / 1000}s.`);
 
-            // Close mobile sidebar if open
             const sidebar = document.getElementById('user-list-sidebar');
             if (sidebar.classList.contains('open')) {
                 sidebar.classList.remove('open');
             }
 
-            // Hide pickers if open
             emojiPickerContainer.classList.add('hidden');
             filePickerContainer.classList.add('hidden');
         }
@@ -1383,7 +1487,7 @@
             setCurrentView('users');
         });
 
-        // --- EVENT LISTENERS (Updated submit handler) ---
+        // --- EVENT LISTENERS ---
         document.getElementById('message-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const content = messageInput.value.trim();
@@ -1396,12 +1500,9 @@
 
             const success = await postMessage(content);
 
-            // Re-enable controls immediately after emitting the message,
-            // as fetching/rendering is handled by the socket listener.
             toggleControls(false);
 
             messageInput.focus();
-            // Also hide pickers on successful send
             emojiPickerContainer.classList.add('hidden');
             filePickerContainer.classList.add('hidden');
         });
@@ -1413,7 +1514,6 @@
 
             if (groupName.length === 0) return;
 
-            // Simple validation: disable button, show loading
             e.target.querySelector('button[type="submit"]').disabled = true;
 
             const success = await createGroup(groupName, invitedUsers);
@@ -1454,7 +1554,6 @@
         }
 
         document.getElementById('sidebar-toggle-button').addEventListener('click', () => {
-            // FIX: Ensure chat-main adjusts its width when the sidebar is minimized/expanded
             const sidebar = document.getElementById('user-list-sidebar');
             const chatMain = document.getElementById('chat-main');
             sidebar.classList.toggle('sidebar-minimized');
@@ -1487,7 +1586,7 @@
         });
 
 
-        // --- SOCKET.IO LISTENERS (Unchanged) ---
+        // --- SOCKET.IO LISTENERS (Updated with Call Signaling) ---
         socket.on('connect', () => {
             if (currentUsername) {
                 socket.emit('user:set_online', currentUsername);
@@ -1527,6 +1626,37 @@
                 const group = groupsList.find(g => g.group_id.toString() === groupId) || {group_name: `Group ${groupId}`};
                 showToast(`New message in group "${group.group_name}" from ${data.sender}!`, 'info', 4000);
                 renderSidebarContent();
+            }
+        });
+
+        // --- NEW CALL LISTENERS ---
+
+        // Called on the RECIPIENT's side
+        socket.on('call:incoming', (data) => {
+            // data: { from: callerUsername, type: 'voice' | 'video' }
+            if (callState.active) {
+                // Busy: immediately send a busy signal or end call
+                socket.emit('call:end', { to: data.from, from: currentUsername });
+                showToast(`Missed incoming ${data.type} call from ${data.from}. (Busy)`, 'error', 5000);
+                return;
+            }
+            showCallUI(data.from, data.type, true);
+        });
+
+        // Called on the CALLER's side
+        socket.on('call:unavailable', (data) => {
+            // data: { to: recipientUsername, type: 'voice' | 'video' }
+            hideCallUI(`User ${data.to} is currently offline.`, 'error');
+        });
+
+        // Called on both sides when the other user hangs up
+        socket.on('call:ended', (data) => {
+            // data: { from: otherUserUsername }
+            if (callState.active && (callState.recipient === data.from || currentRecipient === data.from)) {
+                hideCallUI(`Call ended by ${data.from}.`, 'info');
+            } else {
+                // This might be a busy signal or a general notification
+                showToast(`Call status update: ${data.from} ended the call.`, 'info', 3000);
             }
         });
     </script>
