@@ -685,7 +685,7 @@
          */
         async function startVoiceCall() {
             if (!currentRecipient || groupsList.some(g => g.group_id.toString() === currentRecipient)) {
-                showToast("Voice calls are only supported for private chats.", 'error');
+                showToast("Voice calls are only supported for private chats.", 'error',4000);
                 return;
             }
 
@@ -727,7 +727,7 @@
                 } else if (err.name === "NotFoundError") {
                     message = "No microphone found on this device.";
                 }
-                showToast(`Voice Call Failed: ${message}`, 'error', 8000);
+                showToast(`Voice Call Failed: ${message}`, 'error', 4000);
                 voiceCallBtn.disabled = false;
             }
         }
@@ -737,7 +737,7 @@
          */
         async function startVideoCall() {
             if (!currentRecipient || groupsList.some(g => g.group_id.toString() === currentRecipient)) {
-                showToast("Video calls are only supported for private chats.", 'error');
+                showToast("Video calls are only supported for private chats.", 'error',4000);
                 return;
             }
 
@@ -779,7 +779,7 @@
                 } else if (err.name === "NotFoundError") {
                     message = "No camera or microphone found on this device.";
                 }
-                showToast(`Video Call Failed: ${message}`, 'error', 8000);
+                showToast(`Video Call Failed: ${message}`, 'error', 4000);
                 videoCallBtn.disabled = false;
             }
         }
@@ -1238,74 +1238,84 @@
         }
 
 
-        function renderMessages(messages, isGroup) {
-            const wasAtBottom = chatHistory.scrollHeight - chatHistory.clientHeight <= chatHistory.scrollTop + 20; // Tolerance
+        // --- RENDERING FUNCTIONS ---
 
-            chatHistory.innerHTML = '';
-            const initialPrompt = chatHistory.querySelector('.text-center.text-lg.p-10');
-            if (initialPrompt) initialPrompt.remove();
+// IMPORTANT: Ensure this utility function is present in your <script> tag
+// function formatMessageTimestamp(timestamp) { ... }
 
-            if (messages.length === 0) {
-                chatHistory.innerHTML = `<p class="text-center text-gray-500 text-lg p-10">
-                    <i class="fa fa-comment-dots text-4xl text-gray-300 block mb-2"></i>
-                    Start your conversation!
-                </p>`;
-                return;
+function renderMessages(messages, isGroup) {
+    const wasAtBottom = chatHistory.scrollHeight - chatHistory.clientHeight <= chatHistory.scrollTop + 20; // Tolerance
+
+    chatHistory.innerHTML = '';
+    const initialPrompt = chatHistory.querySelector('.text-center.text-lg.p-10');
+    if (initialPrompt) initialPrompt.remove();
+
+    if (messages.length === 0) {
+        chatHistory.innerHTML = `<p class="text-center text-gray-500 text-lg p-10">
+            <i class="fa fa-comment-dots text-4xl text-gray-300 block mb-2"></i>
+            Start your conversation!
+        </p>`;
+        return;
+    }
+
+    messages.forEach(msg => {
+        // 🟢 FIX 1: Use robust checks for sender username (for alignment and display)
+        const senderUsername = msg.sender || msg.sender_username || msg.username;
+        const isMine = senderUsername === currentUsername;
+        
+        // Use the found senderUsername for display in group chats
+        const senderDisplay = isGroup && !isMine ? `<p class="text-xs font-semibold mb-1 text-gray-500">${senderUsername}</p>` : '';
+        
+        // 🟢 FIX 2: Use robust checks for timestamp value (to prevent "Invalid Date")
+        const timestampValue = msg.timestamp || msg.message_timestamp || msg.created_at;
+        const time = timestampValue ? formatMessageTimestamp(timestampValue) : 'Unknown time';
+
+        const containerClass = isMine ? 'message-container sent' : 'message-container received';
+        const bubbleClass = 'message-bubble';
+        let messageContentHTML = '';
+
+        if (msg.message_type === 'file' && msg.storage_path) {
+            const { icon, color } = getFileIcon(msg.mime_type);
+
+            const fileUrl = `/uploads/${msg.storage_path}`;
+
+            let filePreview = '';
+            if (msg.mime_type && msg.mime_type.startsWith('image/')) {
+                filePreview = `<img src="${fileUrl}" alt="${msg.original_filename}" class="max-w-full rounded-lg mb-2 shadow-md" style="max-height: 250px;">`;
             }
 
-            messages.forEach(msg => {
-                const isMine = msg.sender === currentUsername;
-                const senderDisplay = isGroup && !isMine ? `<p class="text-xs font-semibold mb-1 text-gray-500">${msg.sender}</p>` : '';
-                const date = new Date(msg.timestamp);
-                const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-                const containerClass = isMine ? 'message-container sent' : 'message-container received';
-                const bubbleClass = 'message-bubble';
-                let messageContentHTML = '';
-
-                if (msg.message_type === 'file' && msg.storage_path) {
-                    const { icon, color } = getFileIcon(msg.mime_type);
-
-                    const fileUrl = `/uploads/${msg.storage_path}`;
-
-                    let filePreview = '';
-                    if (msg.mime_type && msg.mime_type.startsWith('image/')) {
-                        filePreview = `<img src="${fileUrl}" alt="${msg.original_filename}" class="max-w-full rounded-lg mb-2 shadow-md" style="max-height: 250px;">`;
-                    }
-
-                    messageContentHTML = `
-                        ${filePreview}
-                        <div class="file-bubble">
-                            <i class="fa ${icon} file-icon ${isMine ? 'text-white' : color}"></i>
-                            <div class="file-info ${isMine ? 'text-white' : 'text-gray-700'}">
-                                <a href="${fileUrl}" target="_blank" class="block truncate hover:opacity-80 transition duration-150">
-                                    ${msg.original_filename}
-                                </a>
-                                ${msg.content && msg.content !== `[File: ${msg.original_filename}]` ? `<p class="text-xs mt-1 opacity-90">${msg.content}</p>` : ''}
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    messageContentHTML = `<p>${msg.content}</p>`;
-                }
-
-
-                chatHistory.innerHTML += `
-                    <div class="${containerClass}">
-                        <div class="${bubbleClass}">
-                            ${senderDisplay}
-                            ${messageContentHTML}
-                            <span class="message-time">${time}</span>
-                        </div>
+            messageContentHTML = `
+                ${filePreview}
+                <div class="file-bubble">
+                    <i class="fa ${icon} file-icon ${isMine ? 'text-white' : color}"></i>
+                    <div class="file-info ${isMine ? 'text-white' : 'text-gray-700'}">
+                        <a href="${fileUrl}" target="_blank" class="block truncate hover:opacity-80 transition duration-150">
+                            ${msg.original_filename}
+                        </a>
+                        ${msg.content && msg.content !== `[File: ${msg.original_filename}]` ? `<p class="text-xs mt-1 opacity-90">${msg.content}</p>` : ''}
                     </div>
-                `;
-            });
-
-            if (wasAtBottom) {
-                chatHistory.scrollTop = chatHistory.scrollHeight;
-            }
+                </div>
+            `;
+        } else {
+            messageContentHTML = `<p>${msg.content}</p>`;
         }
 
+
+        chatHistory.innerHTML += `
+            <div class="${containerClass}">
+                <div class="${bubbleClass}">
+                    ${senderDisplay}
+                    ${messageContentHTML}
+                    <span class="message-time">${time}</span>
+                </div>
+            </div>
+        `;
+    });
+
+    if (wasAtBottom) {
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+}
         function renderSidebarContent() {
             sidebarListContainer.innerHTML = '';
             if (currentView === 'users') {
