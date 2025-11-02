@@ -530,12 +530,12 @@
         const socket = io();
 
 
-        // --- NEW CALL FUNCTIONS ---
+        // --- NEW CALL FUNCTIONS (UPDATED FOR PERMISSION REQUESTS) ---
 
         /**
-         * Starts a Voice Call. This is a placeholder for real WebRTC/Call initiation logic.
+         * Starts a Voice Call. Replaces placeholder with real permission request and signaling.
          */
-        function startVoiceCall() {
+        async function startVoiceCall() {
             if (!currentRecipient) {
                 showToast("Please select a recipient first.", 'error');
                 return;
@@ -545,36 +545,54 @@
             const isGroup = groupsList.some(g => g.group_id.toString() === currentRecipient);
             const chatType = isGroup ? 'Group' : 'Private';
 
-            showToast(`Initiating Voice Call with ${recipientName}...`, 'info', 5000);
-            voiceCallBtn.disabled = true; // Disable while calling
+            voiceCallBtn.disabled = true; // Disable while attempting call
 
-            const callPayload = {
-                from: currentUsername,
-                to: currentRecipient,
-                isGroup: isGroup,
-                callType: 'voice'
-            };
+            try {
+                // 1. Request Microphone Permission
+                showToast("Requesting microphone permission...", 'info', 3000);
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
 
-            // In a real application, this would emit a WebRTC signaling event.
-            socket.emit('call:start_voice', callPayload, (response) => {
-                // Placeholder response handler
-                if (response && response.success) {
-                     showToast(`${chatType} Call signal sent! Awaiting response from ${recipientName}.`, 'success', 3000);
-                     // Logic to display call UI, streaming media, etc.
-                } else {
-                     showToast(`${chatType} Call failed to signal: ${response ? response.message : 'Server error.'}`, 'error', 5000);
-                     voiceCallBtn.disabled = false; // Re-enable on failure
+                // If successful, stop the local tracks immediately as we only needed permission for now
+                stream.getTracks().forEach(track => track.stop());
+
+                showToast(`Microphone permission granted! Initiating Voice Call with ${recipientName}...`, 'success', 3000);
+
+                const callPayload = {
+                    from: currentUsername,
+                    to: currentRecipient,
+                    isGroup: isGroup,
+                    callType: 'voice'
+                };
+                
+                // 2. Initiate Call Signaling (as per server.js update)
+                socket.emit('call:start_voice', callPayload, (response) => {
+                    // Handle actual signaling response from server.js
+                    if (response && response.success) {
+                         showToast(`${chatType} Call signal sent! Awaiting response from ${recipientName}.`, 'success', 3000);
+                         // In a full WebRTC app, this is where you'd start setting up the PeerConnection.
+                    } else {
+                         showToast(`${chatType} Call failed to signal: ${response ? response.message : 'Server error.'}`, 'error', 5000);
+                         voiceCallBtn.disabled = false; // Re-enable on signaling failure
+                    }
+                });
+
+            } catch (err) {
+                console.error("Voice Call Error:", err);
+                let message = "Could not access microphone.";
+                if (err.name === "NotAllowedError") {
+                    message = "Microphone access denied. Please allow permissions in your browser settings.";
+                } else if (err.name === "NotFoundError") {
+                    message = "No microphone found on this device.";
                 }
-            });
-
-            // Re-enable after a timeout for demonstration, as we lack a real call end event.
-            setTimeout(() => { voiceCallBtn.disabled = false; }, 10000);
+                showToast(`Voice Call Failed: ${message}`, 'error', 8000);
+                voiceCallBtn.disabled = false; // Re-enable on media access failure
+            }
         }
 
         /**
-         * Starts a Video Call. This is a placeholder for real WebRTC/Call initiation logic.
+         * Starts a Video Call. Replaces placeholder with real permission request and signaling.
          */
-        function startVideoCall() {
+        async function startVideoCall() {
             if (!currentRecipient) {
                 showToast("Please select a recipient first.", 'error');
                 return;
@@ -589,30 +607,47 @@
                 return;
             }
 
-            showToast(`Initiating Video Call with ${recipientName}...`, 'info', 5000);
-            videoCallBtn.disabled = true; // Disable while calling
+            videoCallBtn.disabled = true; // Disable while attempting call
 
-            const callPayload = {
-                from: currentUsername,
-                to: currentRecipient,
-                isGroup: false,
-                callType: 'video'
-            };
+            try {
+                // 1. Request Camera and Microphone Permission
+                showToast("Requesting camera and microphone permissions...", 'info', 3000);
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                
+                // If successful, stop the local tracks immediately as we only needed permission for now
+                stream.getTracks().forEach(track => track.stop());
 
-            // In a real application, this would emit a WebRTC signaling event.
-            socket.emit('call:start_video', callPayload, (response) => {
-                 // Placeholder response handler
-                if (response && response.success) {
-                     showToast(`Video call signal sent! Awaiting response from ${recipientName}.`, 'success', 3000);
-                     // Logic to display call UI, streaming media, etc.
-                } else {
-                     showToast(`Video call failed to signal: ${response ? response.message : 'Server error.'}`, 'error', 5000);
-                     videoCallBtn.disabled = false; // Re-enable on failure
+                showToast(`Permissions granted! Initiating Video Call with ${recipientName}...`, 'success', 3000);
+
+                const callPayload = {
+                    from: currentUsername,
+                    to: currentRecipient,
+                    isGroup: false,
+                    callType: 'video'
+                };
+                
+                // 2. Initiate Call Signaling (as per server.js update)
+                socket.emit('call:start_video', callPayload, (response) => {
+                     // Handle actual signaling response from server.js
+                    if (response && response.success) {
+                         showToast(`Video call signal sent! Awaiting response from ${recipientName}.`, 'success', 3000);
+                    } else {
+                         showToast(`Video call failed to signal: ${response ? response.message : 'Server error.'}`, 'error', 5000);
+                         videoCallBtn.disabled = false; // Re-enable on signaling failure
+                    }
+                });
+
+            } catch (err) {
+                console.error("Video Call Error:", err);
+                let message = "Could not access camera or microphone.";
+                if (err.name === "NotAllowedError") {
+                    message = "Camera/Mic access denied. Please allow permissions in your browser settings.";
+                } else if (err.name === "NotFoundError") {
+                    message = "No camera or microphone found on this device.";
                 }
-            });
-
-             // Re-enable after a timeout for demonstration
-             setTimeout(() => { videoCallBtn.disabled = false; }, 10000);
+                showToast(`Video Call Failed: ${message}`, 'error', 8000);
+                videoCallBtn.disabled = false; // Re-enable on media access failure
+            }
         }
 
 
@@ -659,118 +694,113 @@
         }
 
         /**
- * Handles file selection, uploads the file to the server, and sends the message.
- * @param {Event} event The change event from the file input.
- */
-async function uploadFileAndSendMessage(event) {
-    const file = event.target.files[0];
-    filePickerContainer.classList.add('hidden');
+         * Handles file selection, uploads the file to the server, and sends the message.
+         * @param {Event} event The change event from the file input.
+         */
+        async function uploadFileAndSendMessage(event) {
+            const file = event.target.files[0];
+            filePickerContainer.classList.add('hidden');
 
-   if (!file || !currentRecipient || !currentUsername) {
-    // Check if the variables are falsy (null, undefined, or empty string "")
-    if (!currentUsername) {
-        showToast('You are not logged in. Please log in to send files.', 'error', 5000);
-    } else if (!currentRecipient) {
-        showToast('Please select a recipient before sending a file.', 'error', 5000);
-    } else {
-        // Fallback for file or other issues
-        showToast('Missing file or chat data.', 'error', 5000);
-    }
-    console.error("Attempted file upload with missing context data.");
-    return;
-}
-
-    toggleControls(true);
-    // Use a persistent toast for upload
-    showToast(`Uploading ${file.name}...`, 'info', 0);
-
-    const isGroup = groupsList.some(g => g.group_id.toString() === currentRecipient);
-    const content = messageInput.value.trim() || `[File: ${file.name}]`;
-       console.log('Current Username:', currentUsername);
-       console.log('Current Recipient:', currentRecipient);
-       console.log('Is Group:', isGroup);
-    const formData = new FormData();
-    // ?? CORRECTION/CHECK: The backend server.js uses 'chatFile' or 'file'?
-    // Assuming backend uses 'file' based on your formData.append('file', file)
-    formData.append('file', file);
-    formData.append('username', currentUsername);
-    formData.append('recipientUsernameOrId', currentRecipient);
-    formData.append('isGroup', isGroup.toString());
-    // Render an optimistic file message
-    renderOptimisticMessage(content, file.name, file.type);
-
-    // Clear message input immediately to remove the caption
-    messageInput.value = '';
-
-    try {
-        // 1. Upload the file
-        const uploadResponse = await fetch('/api/upload/file', {
-            method: 'POST',
-            body: formData,
-        });
-
-        // ?? CRITICAL FIX: Check response.ok (200-299 status) before reading the body
-        if (!uploadResponse.ok) {
-             // Handle HTTP status errors gracefully
-            let errorMessage = `Upload failed with status ${uploadResponse.status}.`;
-            try {
-                // Try to parse the error message if the server sent JSON
-                const errorData = await uploadResponse.json();
-                errorMessage = errorData.message || errorMessage;
-            } catch {
-                // If parsing fails (e.g., server returned HTML/text, like the 404 page)
-                errorMessage = `Server error (${uploadResponse.status}). Failed to parse error response.`;
+            if (!file || !currentRecipient || !currentUsername) {
+                // Check if the variables are falsy (null, undefined, or empty string "")
+                if (!currentUsername) {
+                    showToast('You are not logged in. Please log in to send files.', 'error', 5000);
+                } else if (!currentRecipient) {
+                    showToast('Please select a recipient before sending a file.', 'error', 5000);
+                } else { // Fallback for file or other issues
+                    showToast('Missing file or chat data.', 'error', 5000);
+                }
+                console.error("Attempted file upload with missing context data.");
+                return;
             }
-            // Throwing the error here exits the try block and jumps to catch
-            throw new Error(errorMessage);
+
+            toggleControls(true); // Disable controls
+            // Use a persistent toast for upload
+            showToast(`Uploading ${file.name}...`, 'info', 0);
+
+            const isGroup = groupsList.some(g => g.group_id.toString() === currentRecipient);
+            const content = messageInput.value.trim() || `[File: ${file.name}]`;
+
+            console.log('Current Username:', currentUsername);
+            console.log('Current Recipient:', currentRecipient);
+            console.log('Is Group:', isGroup);
+
+            const formData = new FormData();
+            // Assuming backend uses 'file' based on your formData.append('file', file)
+            formData.append('file', file);
+            formData.append('username', currentUsername);
+            formData.append('recipientUsernameOrId', currentRecipient);
+            formData.append('isGroup', isGroup.toString());
+
+            // Render an optimistic file message
+            renderOptimisticMessage(content, file.name, file.type);
+
+            // Clear message input immediately to remove the caption
+            messageInput.value = '';
+
+            try {
+                // 1. Upload the file
+                const uploadResponse = await fetch('/api/upload/file', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!uploadResponse.ok) {
+                    const errorText = await uploadResponse.text();
+                    let errorMessage = `HTTP error! status: ${uploadResponse.status} - ${errorText.substring(0, 50)}...`;
+                    // Attempt to parse JSON error message if possible
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        errorMessage = errorJson.message || errorMessage;
+                    } catch (e) { /* ignore and jumps to catch */ }
+                    throw new Error(errorMessage);
+                }
+
+                // If response is OK, safely parse the JSON
+                const uploadData = await uploadResponse.json();
+
+                if (!uploadData.success || !uploadData.file_id) {
+                    // Handle application-level success: false (if status was 200 but logic failed)
+                    throw new Error(uploadData.message || 'File upload failed: No file ID returned.');
+                }
+
+                showToast(`File uploaded! Sending message...`, 'success', 3000);
+
+                // 2. Send the message with file metadata via Socket.IO
+                const messagePayload = {
+                    from: currentUsername,
+                    to: currentRecipient,
+                    content: content,
+                    fileId: uploadData.file_id,
+                    messageType: 'file'
+                };
+
+                if (isGroup) {
+                    socket.emit('group:send_message', messagePayload);
+                } else {
+                    socket.emit('chat:send_message', messagePayload);
+                }
+
+            } catch (error) {
+                showToast(`File upload failed! ${error.message}`, 'error', 5000);
+                // On upload failure, revert optimistic UI
+                const optimisticBubble = chatHistory.querySelector('[data-optimistic="true"]');
+                if (optimisticBubble) optimisticBubble.remove();
+            } finally {
+                // This is necessary to allow the user to re-select the same file
+                event.target.value = null;
+                toggleControls(false); // Re-enable controls
+            }
         }
 
-        // If response is OK, safely parse the JSON
-        const uploadData = await uploadResponse.json();
-
-        if (!uploadData.success || !uploadData.file_id) {
-             // Handle application-level success: false (if status was 200 but logic failed)
-            throw new Error(uploadData.message || 'File upload failed: No file ID returned.');
-        }
-
-        showToast(`File uploaded! Sending message...`, 'success', 3000);
-
-        // 2. Send the message with file metadata via Socket.IO
-        const messagePayload = {
-            from: currentUsername,
-            to: currentRecipient,
-            content: content,
-            fileId: uploadData.file_id,
-            messageType: 'file'
-        };
-
-        if (isGroup) {
-            socket.emit('group:send_message', messagePayload);
-        } else {
-            socket.emit('chat:send_message', messagePayload);
-        }
-
-    } catch (error) {
-        showToast(`File upload failed! ${error.message}`, 'error', 5000);
-
-        // On upload failure, revert optimistic UI
-        const optimisticBubble = chatHistory.querySelector('[data-optimistic="true"]');
-        if (optimisticBubble) optimisticBubble.remove();
-
-    } finally {
-        // This is necessary to allow the user to re-select the same file
-        event.target.value = null;
-        toggleControls(false); // Re-enable controls
-    }
-}
         // --- UTILITY FUNCTIONS (Unchanged) ---
-
         function showToast(message, type = 'success', duration = 3000) {
             const colors = {
                 success: { bg: 'bg-green-500', icon: 'fa-check-circle' },
                 error: { bg: 'bg-red-500', icon: 'fa-times-circle' },
                 info: { bg: 'bg-blue-500', icon: 'fa-info-circle' }
             };
+
             const { bg, icon } = colors[type] || colors.info;
 
             const toast = document.createElement('div');
@@ -780,7 +810,6 @@ async function uploadFileAndSendMessage(event) {
                 <i class="fa ${icon} text-xl mr-3"></i>
                 <span>${message}</span>
             `;
-
             toastContainer.appendChild(toast);
 
             requestAnimationFrame(() => {
@@ -790,60 +819,45 @@ async function uploadFileAndSendMessage(event) {
                 toast.style.opacity = '1';
             });
 
-            setTimeout(() => {
-                toast.classList.remove('toast-enter-active');
-                toast.classList.add('toast-leave-active');
-                toast.style.transform = 'translateY(20px)';
-                toast.style.opacity = '0';
+            if (duration > 0) {
+                setTimeout(() => {
+                    toast.classList.add('toast-leave-to');
+                    toast.addEventListener('transitionend', () => toast.remove());
+                }, duration);
+            }
 
-                setTimeout(() => toast.remove(), 300);
-            }, duration);
+            // Cleanup function to remove previous persistent toasts
+            Array.from(toastContainer.children).forEach(child => {
+                if (child !== toast && child.style.opacity === '1' && duration === 0) {
+                    child.remove();
+                }
+            });
         }
 
-        /**
-         * Switches the content displayed in the sidebar between users and groups.
-         * @param {string} view 'users' or 'groups'
-         */
-        function setCurrentView(view) {
-            if (currentView === view) return;
-            currentView = view;
+        function formatMessageTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diffDays = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
 
-            // Update Tab Styling
-            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-            document.getElementById(`tab-${view}`).classList.add('active');
-
-            // Toggle Create Group Button visibility
-            if (view === 'groups') {
-                createGroupBtn.classList.remove('hidden');
+            if (diffDays < 1) {
+                // Less than 24 hours: just time
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } else if (diffDays < 7) {
+                // Last 7 days: day of the week and time
+                return date.toLocaleDateString([], { weekday: 'short' }) + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             } else {
-                createGroupBtn.classList.add('hidden');
+                // Older: full date
+                return date.toLocaleDateString();
             }
-
-            // Re-render the sidebar list based on the new view
-            renderSidebarContent();
         }
 
-        function showCreateGroupModal() {
-            createGroupModal.classList.remove('hidden');
-            document.getElementById('group-name').focus();
-        }
-
-        function showAddMemberModal() {
-            if (!currentRecipient || addMemberBtn.classList.contains('hidden')) {
-                showToast("Please select a group first.", 'error');
-                return;
-            }
-            addMemberModal.classList.remove('hidden');
-            document.getElementById('new-members-input').focus();
-        }
-
-
-        // --- API INTEGRATION (Unchanged) ---
 
         async function fetchCurrentUserId(username) {
             try {
                 const response = await fetch(`/api/user/me?username=${username}`);
-                if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const data = await response.json();
                 if (data.success && data.user_id) {
                     currentUserId = data.user_id;
@@ -876,6 +890,7 @@ async function uploadFileAndSendMessage(event) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+
                 const data = await response.json();
 
                 if (response.ok && (data.group_id || data.groupId)) {
@@ -918,7 +933,7 @@ async function uploadFileAndSendMessage(event) {
 
                 if (response.ok && data.success) {
                     showToast(`${newMembers.join(', ')} added to the group!`, 'success');
-                    fetchGroups();
+                    fetchGroups(); // Refresh group list/details
                     return true;
                 } else {
                     showToast(`Failed to add members: ${data.message || 'Unknown error.'}`, 'error');
@@ -931,29 +946,27 @@ async function uploadFileAndSendMessage(event) {
             }
         }
 
+        function showCreateGroupModal() {
+            document.getElementById('create-group-modal').classList.remove('hidden');
+        }
+
+        function showAddMemberModal() {
+            const group = groupsList.find(g => g.group_id.toString() === currentRecipient);
+            if (!group) return; // Should not happen if button is visible
+            addMemberGroupNameEl.textContent = group.group_name;
+            document.getElementById('add-member-modal').classList.remove('hidden');
+        }
+
         async function fetchRegisteredUsers() {
             try {
-                const response = await fetch(`/api/users?currentUsername=${currentUsername}`);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                const data = await response.json();
-
-                if (Array.isArray(data)) {
-                    registeredUserList = data.map(user => ({
-                        ...user,
-                        isOnline: onlineUsernamesList.includes(user.username)
-                    }));
-                } else if (data.success && Array.isArray(data.users)) {
-                    registeredUserList = data.users.map(user => ({
-                        ...user,
-                        isOnline: onlineUsernamesList.includes(user.username)
-                    }));
-                } else {
-                    throw new Error("Unexpected API response format or missing user list.");
+                const response = await fetch('/api/users');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
-
+                const data = await response.json();
+                registeredUserList = data.filter(user => user.username !== currentUsername); // Exclude self
                 if (currentView === 'users') renderSidebarContent();
                 console.log("Successfully fetched all registered users.");
-
             } catch (error) {
                 console.error("Error fetching registered users:", error);
                 if (currentView === 'users') sidebarListContainer.innerHTML = `<p class="text-red-500 p-4">Network error fetching users.</p>`;
@@ -963,9 +976,10 @@ async function uploadFileAndSendMessage(event) {
         async function fetchGroups() {
             try {
                 const response = await fetch(`/api/groups?username=${currentUsername}`);
-                if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const data = await response.json();
-
                 if (data.success) {
                     groupsList = data.groups || [];
                     if (currentView === 'groups') renderSidebarContent();
@@ -976,19 +990,18 @@ async function uploadFileAndSendMessage(event) {
             } catch (error) {
                 console.error("Error fetching groups:", error);
                 if (currentView === 'groups') {
-                     sidebarListContainer.innerHTML = `<p class="text-red-500 p-4">Error loading groups. Ensure the server is running.</p>`;
+                    sidebarListContainer.innerHTML = `<p class="text-red-500 p-4">Error loading groups. Ensure the server is running.</p>`;
                 }
             }
         }
-
 
         async function fetchMessages() {
             if (!currentRecipient) return;
 
             try {
                 const isGroup = groupsList.some(g => g.group_id.toString() === currentRecipient);
-
                 let apiPath;
+
                 if (isGroup) {
                     apiPath = `/api/messages/group/${currentRecipient}?username=${currentUsername}`;
                 } else {
@@ -996,7 +1009,6 @@ async function uploadFileAndSendMessage(event) {
                 }
 
                 const response = await fetch(apiPath);
-
                 if (!response.ok) {
                     const errorText = await response.text();
                     throw new Error(`HTTP error! status: ${response.status} - ${errorText.substring(0, 50)}...`);
@@ -1023,38 +1035,30 @@ async function uploadFileAndSendMessage(event) {
             if (content.length === 0 || !currentRecipient) return false;
 
             const isGroup = groupsList.some(g => g.group_id.toString() === currentRecipient);
-
-            const payload = {
+            const messagePayload = {
                 from: currentUsername,
                 to: currentRecipient,
                 content: content,
-                // These are null/text for a pure text message
-                fileId: null,
                 messageType: 'text'
             };
 
+            // This optimistic UI removal logic is now handled by the socket.on('chat:new_message') or fetchMessages
+            // const optimisticBubble = chatHistory.querySelector('[data-optimistic="true"]');
+            // if (optimisticBubble) optimisticBubble.remove();
+
             if (isGroup) {
-                socket.emit('group:send_message', payload);
-                return true;
-            } else if (currentRecipient) {
-                socket.emit('chat:send_message', payload);
-                return true;
+                socket.emit('group:send_message', messagePayload);
             } else {
-                console.error("Cannot post message: No recipient selected.");
-                showToast("Select a user or group to chat.", 'error');
-                return false;
+                socket.emit('chat:send_message', messagePayload);
             }
+
+            // Return true to indicate the message was submitted for sending
+            return true;
         }
 
+        // --- RENDERING FUNCTIONS ---
 
-        // --- UI RENDERING (UPDATED for files) ---
-
-        /**
-         * Determines the appropriate icon and background for a file based on its MIME type.
-         */
         function getFileIcon(mimeType) {
-            if (!mimeType) return { icon: 'fa-file', color: 'text-gray-400' };
-
             if (mimeType.startsWith('image/')) {
                 return { icon: 'fa-image', color: 'text-blue-500' };
             } else if (mimeType.startsWith('video/')) {
@@ -1079,14 +1083,17 @@ async function uploadFileAndSendMessage(event) {
             const containerClass = 'message-container sent';
             const messageClass = 'message-bubble opacity-70';
             const time = 'Sending...';
+
             const isFile = filename && mimeType;
 
             const initialPrompt = chatHistory.querySelector('.text-center.text-lg.p-10');
             if (initialPrompt) initialPrompt.remove();
 
             let messageContentHTML;
+
             if (isFile) {
                 const { icon } = getFileIcon(mimeType);
+
                 messageContentHTML = `
                     <div class="file-bubble">
                         <i class="fa ${icon} file-icon"></i>
@@ -1112,9 +1119,84 @@ async function uploadFileAndSendMessage(event) {
             chatHistory.scrollTop = chatHistory.scrollHeight;
         }
 
+
+        function renderMessages(messages, isGroup) {
+            const wasAtBottom = chatHistory.scrollHeight - chatHistory.clientHeight <= chatHistory.scrollTop + 20; // Tolerance
+
+            chatHistory.innerHTML = '';
+            const initialPrompt = chatHistory.querySelector('.text-center.text-lg.p-10');
+            if (initialPrompt) initialPrompt.remove();
+
+            if (messages.length === 0) {
+                chatHistory.innerHTML = `<p class="text-center text-gray-500 text-lg p-10">
+                    <i class="fa fa-comment-dots text-4xl text-gray-300 block mb-2"></i>
+                    Start your conversation!
+                </p>`;
+                return;
+            }
+
+            messages.forEach(msg => {
+                const isMine = msg.sender === currentUsername;
+                const senderDisplay = isGroup && !isMine ? `<p class="text-xs font-semibold mb-1 text-gray-500">${msg.sender}</p>` : '';
+                const date = new Date(msg.timestamp);
+                const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                const containerClass = isMine ? 'message-container sent' : 'message-container received';
+                const bubbleClass = 'message-bubble';
+                let messageContentHTML = '';
+
+                if (msg.message_type === 'file' && msg.storage_path) {
+                    const { icon, color } = getFileIcon(msg.mime_type);
+
+                    // ?? CORRECTED FILE LOGIC STARTS HERE
+                    // This block handles the correct URL construction and preview logic.
+                    // Construct the correct PUBLIC URL
+                    const fileUrl = `/uploads/${msg.storage_path}`;
+
+                    // Logic for image preview
+                    let filePreview = '';
+                    if (msg.mime_type && msg.mime_type.startsWith('image/')) {
+                        // Use the full public URL for the image source
+                        filePreview = `<img src="${fileUrl}" alt="${msg.original_filename}" class="max-w-full rounded-lg mb-2 shadow-md" style="max-height: 250px;">`;
+                    }
+
+                    messageContentHTML = `
+                        ${filePreview}
+                        <div class="file-bubble">
+                            <i class="fa ${icon} file-icon ${isMine ? 'text-white' : color}"></i>
+                            <div class="file-info ${isMine ? 'text-white' : 'text-gray-700'}">
+                                <a href="${fileUrl}" target="_blank" class="block truncate hover:opacity-80 transition duration-150">
+                                    ${msg.original_filename}
+                                </a>
+                                ${msg.content && msg.content !== `[File: ${msg.original_filename}]` ? `<p class="text-xs mt-1 opacity-90">${msg.content}</p>` : ''}
+                            </div>
+                        </div>
+                    `;
+                // ?? END OF FILE LOGIC
+                } else {
+                    // Regular text message
+                    messageContentHTML = `<p>${msg.content}</p>`;
+                }
+
+
+                chatHistory.innerHTML += `
+                    <div class="${containerClass}">
+                        <div class="${bubbleClass}">
+                            ${senderDisplay}
+                            ${messageContentHTML}
+                            <span class="message-time">${time}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            if (wasAtBottom) {
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            }
+        }
+
         function renderSidebarContent() {
             sidebarListContainer.innerHTML = '';
-
             if (currentView === 'users') {
                 sidebarListTitle.textContent = 'All Users';
                 renderUserList();
@@ -1128,40 +1210,34 @@ async function uploadFileAndSendMessage(event) {
             const updatedUsers = registeredUserList.map(user => ({
                 ...user,
                 isOnline: onlineUsernamesList.includes(user.username)
-            }));
-
-            const sortedUsers = [...updatedUsers].sort((a, b) => {
-                if (a.isOnline && !b.isOnline) return -1;
-                if (!a.isOnline && b.isOnline) return 1;
+            })).sort((a, b) => {
+                // Sort by online status (online first), then alphabetically
+                if (a.isOnline !== b.isOnline) {
+                    return a.isOnline ? -1 : 1;
+                }
                 return a.username.localeCompare(b.username);
             });
 
-            if (sortedUsers.length === 0) {
+            if (updatedUsers.length === 0) {
                 sidebarListContainer.innerHTML = `<p class="text-center text-gray-500 p-4">No other users registered.</p>`;
                 return;
             }
 
-            sidebarListContainer.innerHTML = sortedUsers.map(user => {
+            sidebarListContainer.innerHTML = updatedUsers.map(user => {
                 const username = user.username;
+                const statusColor = user.isOnline ? 'bg-green-500' : 'bg-gray-400';
                 const isSelected = username === currentRecipient ? 'bg-gray-200' : 'hover:bg-gray-100';
-                const isOnline = user.isOnline;
-                const statusColor = isOnline ? 'bg-green-500' : 'bg-gray-400';
                 const unreadCount = unreadCounts[username] || 0;
-                const badge = unreadCount > 0
-                    ? `<span class="unread-badge ml-auto px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded-full">${unreadCount}</span>`
-                    : `<span class="unread-badge ml-auto w-6"></span>`;
+                const badge = unreadCount > 0 ? `<span class="unread-badge ml-auto px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded-full">${unreadCount}</span>` : `<span class="unread-badge ml-auto w-6"></span>`;
 
                 return `
-                    <div id="user-${username}" data-type="user" data-id="${username}"
-                         class="user-item flex items-center p-3 my-2 cursor-pointer rounded-xl transition duration-150 ${isSelected}">
-
+                    <div data-type="user" data-id="${username}" class="user-item flex items-center p-3 my-2 cursor-pointer rounded-xl transition duration-150 ${isSelected}">
                         <div class="status-wrapper relative w-10 h-10 flex-shrink-0">
                             <div class="user-avatar w-full h-full rounded-full bg-blue-500 flex items-center justify-center text-white text-lg font-bold" style="background-color: var(--primary-color);">
                                 ${username[0].toUpperCase()}
                             </div>
                             <div class="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${statusColor}"></div>
                         </div>
-
                         <span class="user-name ml-3 text-gray-800 font-semibold truncate flex-1">${username}</span>
                         ${badge}
                     </div>
@@ -1177,9 +1253,7 @@ async function uploadFileAndSendMessage(event) {
 
         function renderGroupList() {
             if (groupsList.length === 0) {
-                 sidebarListContainer.innerHTML = `<p class="text-center text-gray-500 p-4">
-                    <i class="fa fa-info-circle mr-2"></i> You haven't joined any groups. Create one with the **'+'** button!
-                </p>`;
+                sidebarListContainer.innerHTML = `<p class="text-center text-gray-500 p-4"> <i class="fa fa-info-circle mr-2"></i> You haven't joined any groups. Create one with the **'+'** button! </p>`;
                 return;
             }
 
@@ -1187,30 +1261,21 @@ async function uploadFileAndSendMessage(event) {
                 const groupId = group.group_id.toString();
                 const isSelected = groupId === currentRecipient ? 'bg-gray-200' : 'hover:bg-gray-100';
                 const unreadCount = unreadCounts[groupId] || 0;
-                const badge = unreadCount > 0
-                    ? `<span class="unread-badge ml-auto px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded-full">${unreadCount}</span>`
-                    : `<span class="unread-badge ml-auto w-6"></span>`;
-
+                const badge = unreadCount > 0 ? `<span class="unread-badge ml-auto px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded-full">${unreadCount}</span>` : `<span class="unread-badge ml-auto w-6"></span>`;
                 const memberCountText = group.member_count ? `${group.member_count} members` : '...members';
                 const lastActivity = group.last_activity ? new Date(group.last_activity).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Never';
 
                 return `
-                    <div data-type="group" data-id="${groupId}" data-name="${group.group_name}"
-                         class="user-item flex items-center p-3 my-2 cursor-pointer rounded-xl transition duration-150 ${isSelected}">
-
+                    <div data-type="group" data-id="${groupId}" data-name="${group.group_name}" class="user-item flex items-center p-3 my-2 cursor-pointer rounded-xl transition duration-150 ${isSelected}">
                         <div class="status-wrapper relative w-10 h-10 flex-shrink-0">
                             <div class="user-avatar w-full h-full rounded-full bg-gray-400 flex items-center justify-center text-white text-lg font-bold">
                                 <i class="fa fa-users-rectangle text-sm"></i>
                             </div>
-                            <div title="${memberCountText}" class="member-info absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white bg-blue-500 flex items-center justify-center text-[8px] text-white">
-                                <i class="fa fa-user-group text-[8px]"></i>
+                            <div title="${memberCountText}" class="member-info absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white bg-blue-500 flex items-center justify-center text-xs text-white">
+                                <i class="fa fa-info"></i>
                             </div>
                         </div>
-
-                        <div class="ml-3 text-gray-800 flex-1 min-w-0">
-                            <span class="user-name font-semibold truncate block">${group.group_name}</span>
-                            <span class="text-xs text-gray-500 truncate block">${memberCountText} - Last: ${lastActivity}</span>
-                        </div>
+                        <span class="user-name ml-3 text-gray-800 font-semibold truncate flex-1">${group.group_name}</span>
                         ${badge}
                     </div>
                 `;
@@ -1223,103 +1288,10 @@ async function uploadFileAndSendMessage(event) {
             });
         }
 
-        /**
-         * Renders the chat messages, including file attachments.
-         */
-        function renderMessages(messages, isGroup) {
-    const currentId = parseInt(currentUserId);
-    const wasAtBottom = chatHistory.scrollHeight - chatHistory.clientHeight <= chatHistory.scrollTop + 10;
-    chatHistory.innerHTML = '';
-
-    if (messages.length === 0) {
-        chatHistory.innerHTML = `<p class="text-center text-gray-500 text-lg p-10">Start your conversation with ${recipientNameEl.textContent}.</p>`;
-        if (wasAtBottom) chatHistory.scrollTop = chatHistory.scrollHeight;
-        return;
-    }
-
-    messages.forEach(msg => {
-        let isMine;
-        let senderDisplay = '';
-        let senderId;
-
-        if (isGroup) {
-            senderId = parseInt(msg.sender_id);
-            isMine = senderId === currentId;
-
-            if (!isMine && msg.sender_username) {
-                senderDisplay = `<p class="font-bold text-xs mb-1">${msg.sender_username}</p>`;
-            }
-        } else {
-            senderId = parseInt(msg.sender_id);
-            isMine = senderId === currentId;
-        }
-
-        const date = msg.sent_at ? new Date(msg.sent_at) : new Date();
-        const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-        const containerClass = isMine ? 'message-container sent' : 'message-container received';
-        const bubbleClass = 'message-bubble';
-        let messageContentHTML = '';
-
-        if (msg.message_type === 'file' && msg.storage_path) {
-            const { icon, color } = getFileIcon(msg.mime_type);
-
-            // ?? CORRECTED FILE LOGIC STARTS HERE
-            // This block handles the correct URL construction and preview logic.
-
-            // Construct the correct PUBLIC URL
-            const fileUrl = `/uploads/${msg.storage_path}`;
-
-            // Logic for image preview
-            let filePreview = '';
-            if (msg.mime_type && msg.mime_type.startsWith('image/')) {
-                // Use the full public URL for the image source
-                filePreview = `<img src="${fileUrl}" alt="${msg.original_filename}" class="max-w-full rounded-lg mb-2 shadow-md" style="max-height: 250px;">`;
-            }
-
-            messageContentHTML = `
-                ${filePreview}
-                <div class="file-bubble">
-                    <i class="fa ${icon} file-icon ${isMine ? 'text-white' : color}"></i>
-                    <div class="file-info ${isMine ? 'text-white' : 'text-gray-700'}">
-                        <a href="${fileUrl}" target="_blank" class="block truncate hover:opacity-80 transition duration-150">
-                            ${msg.original_filename}
-                        </a>
-                        ${msg.content && msg.content !== `[File: ${msg.original_filename}]` ? `<p class="text-xs mt-1 opacity-90">${msg.content}</p>` : ''}
-                    </div>
-                </div>
-            `;
-            // ?? END OF FILE LOGIC
-
-        } else {
-            // Regular text message
-            messageContentHTML = `<p>${msg.content}</p>`;
-        }
-
-        chatHistory.innerHTML += `
-            <div class="${containerClass}">
-                <div class="${bubbleClass}">
-                    ${senderDisplay}
-                    ${messageContentHTML}
-                    <span class="message-time">${time}</span>
-                </div>
-            </div>
-        `;
-    });
-
-    if (wasAtBottom) {
-        chatHistory.scrollTop = chatHistory.scrollHeight;
-    }
-}
-
-
         // --- CHAT MANAGEMENT (Updated to enable/disable new buttons) ---
-
         function startChat(recipientId, type, recipientName) {
             if (messagePollInterval) clearInterval(messagePollInterval);
-
             currentRecipient = recipientId.toString();
-
             const displayName = type === 'user' ? recipientId : (recipientName || `Group ID: ${recipientId}`);
             recipientNameEl.textContent = displayName;
 
@@ -1332,43 +1304,61 @@ async function uploadFileAndSendMessage(event) {
                 voiceCallBtn.disabled = false;
                 videoCallBtn.disabled = false;
                 videoCallBtn.classList.remove('opacity-50', 'pointer-events-none');
+                addMemberBtn.classList.add('hidden');
             } else {
                 // Group chat: Only voice call is generally supported/enabled
                 voiceCallBtn.disabled = false;
                 videoCallBtn.disabled = true; // Disable video for groups
                 // Visually indicate it's disabled for groups
                 videoCallBtn.classList.add('opacity-50', 'pointer-events-none');
-            }
-
-            // Toggle visibility of the Add Member button
-            if (type === 'group') {
                 addMemberBtn.classList.remove('hidden');
-                addMemberBtn.dataset.groupId = currentRecipient;
-                addMemberGroupNameEl.textContent = displayName;
-            } else {
-                addMemberBtn.classList.add('hidden');
             }
 
-            // Close pickers when switching chat
+
+            // Clear unread count for the selected recipient
+            if (unreadCounts[recipientId]) {
+                unreadCounts[recipientId] = 0;
+                renderSidebarContent();
+            }
+
+            // Reset chat history UI
+            chatHistory.innerHTML = `<p class="text-center text-gray-500 text-lg p-10">
+                <i class="fa fa-spinner fa-spin text-4xl text-gray-300 block mb-2"></i>
+                Loading messages...
+            </p>`;
+
+            // Fetch initial messages and start polling
+            fetchMessages();
+            messagePollInterval = setInterval(fetchMessages, POLL_RATE);
+            console.log(`Chat started with ${displayName} (${type}). Polling every ${POLL_RATE / 1000}s.`);
+
+            // Close mobile sidebar if open
+            const sidebar = document.getElementById('user-list-sidebar');
+            if (sidebar.classList.contains('open')) {
+                sidebar.classList.remove('open');
+            }
+
+            // Hide pickers if open
             emojiPickerContainer.classList.add('hidden');
             filePickerContainer.classList.add('hidden');
-
-
-            if (unreadCounts[currentRecipient]) {
-                unreadCounts[currentRecipient] = 0;
-            }
-
-            renderSidebarContent();
-
-            messagePollInterval = setInterval(fetchMessages, POLL_RATE);
-            fetchMessages();
-
-            if (window.innerWidth < 1024) {
-                document.getElementById('user-list-sidebar').classList.remove('open');
-            }
         }
 
-        // --- AUTHENTICATION AND INITIAL SETUP (Unchanged) ---
+        function setCurrentView(view) {
+            currentView = view;
+            document.getElementById('tab-users').classList.remove('active');
+            document.getElementById('tab-groups').classList.remove('active');
+
+            if (view === 'users') {
+                document.getElementById('tab-users').classList.add('active');
+                createGroupBtn.classList.add('hidden');
+            } else {
+                document.getElementById('tab-groups').classList.add('active');
+                createGroupBtn.classList.remove('hidden');
+            }
+            renderSidebarContent();
+        }
+
+        // --- MAIN APPLICATION SETUP ---
         document.addEventListener('DOMContentLoaded', async () => {
             if (currentUsername) {
                 currentUserDisplayEl.textContent = currentUsername;
@@ -1382,7 +1372,6 @@ async function uploadFileAndSendMessage(event) {
                 }
 
                 socket.emit('user:set_online', currentUsername);
-
                 await fetchGroups();
                 fetchRegisteredUsers();
 
@@ -1399,28 +1388,63 @@ async function uploadFileAndSendMessage(event) {
             e.preventDefault();
             const content = messageInput.value.trim();
 
-    if (!content || !currentRecipient) return;
+            if (!content || !currentRecipient) return;
 
-    toggleControls(true);
-    messageInput.value = '';
-    renderOptimisticMessage(content);
+            toggleControls(true);
+            messageInput.value = '';
+            renderOptimisticMessage(content);
 
-    const success = await postMessage(content);
+            const success = await postMessage(content);
 
-    // FIX APPLIED HERE: These two lines must be removed.
-    /*
-    const optimisticBubble = chatHistory.querySelector('[data-optimistic="true"]');
-    if (optimisticBubble) optimisticBubble.remove();
-    await fetchMessages();
-    */
+            // Re-enable controls immediately after emitting the message,
+            // as fetching/rendering is handled by the socket listener.
+            toggleControls(false);
 
-    toggleControls(false);
-    messageInput.focus();
+            messageInput.focus();
+            // Also hide pickers on successful send
+            emojiPickerContainer.classList.add('hidden');
+            filePickerContainer.classList.add('hidden');
+        });
 
-    // Also hide pickers on successful send
-    emojiPickerContainer.classList.add('hidden');
-    filePickerContainer.classList.add('hidden');
-});
+        document.getElementById('create-group-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const groupName = document.getElementById('group-name').value.trim();
+            const invitedUsers = document.getElementById('group-invites').value.trim();
+
+            if (groupName.length === 0) return;
+
+            // Simple validation: disable button, show loading
+            e.target.querySelector('button[type="submit"]').disabled = true;
+
+            const success = await createGroup(groupName, invitedUsers);
+
+            e.target.querySelector('button[type="submit"]').disabled = false;
+
+            if (success) {
+                document.getElementById('create-group-modal').classList.add('hidden');
+                document.getElementById('group-name').value = '';
+                document.getElementById('group-invites').value = '';
+            }
+        });
+
+        document.getElementById('add-member-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const newMembers = document.getElementById('new-members-input').value.trim();
+
+            if (newMembers.length === 0) return;
+
+            e.target.querySelector('button[type="submit"]').disabled = true;
+
+            const success = await addMembersToGroup(newMembers);
+
+            e.target.querySelector('button[type="submit"]').disabled = false;
+
+            if (success) {
+                document.getElementById('add-member-modal').classList.add('hidden');
+                document.getElementById('new-members-input').value = '';
+            }
+        });
+
         document.getElementById('logout-button').addEventListener('click', logout);
 
         function logout() {
@@ -1433,68 +1457,43 @@ async function uploadFileAndSendMessage(event) {
             // FIX: Ensure chat-main adjusts its width when the sidebar is minimized/expanded
             const sidebar = document.getElementById('user-list-sidebar');
             const chatMain = document.getElementById('chat-main');
-
             sidebar.classList.toggle('sidebar-minimized');
 
             if (sidebar.classList.contains('sidebar-minimized')) {
-                // Minimized: 80px
-                chatMain.style.width = 'calc(100% - 80px)';
+                chatMain.style.marginLeft = '80px';
             } else {
-                // Expanded: 300px (Default desktop width)
-                chatMain.style.width = 'calc(100% - 300px)';
+                chatMain.style.marginLeft = '300px';
             }
         });
 
+
+        // Mobile sidebar toggles
         document.getElementById('sidebar-open-mobile').addEventListener('click', () => {
             document.getElementById('user-list-sidebar').classList.add('open');
         });
-
         document.getElementById('sidebar-close-mobile').addEventListener('click', () => {
             document.getElementById('user-list-sidebar').classList.remove('open');
         });
 
-        document.getElementById('create-group-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const groupName = document.getElementById('group-name').value.trim();
-            const groupInvites = document.getElementById('group-invites').value.trim();
 
-            if (!groupName) { showToast("Group name is required.", 'error'); return; }
-
-            const formInputs = document.querySelectorAll('#create-group-form input, #create-group-form button');
-            formInputs.forEach(el => el.disabled = true);
-
-            const success = await createGroup(groupName, groupInvites);
-
-            formInputs.forEach(el => el.disabled = false);
-
-            if (success) {
-                createGroupModal.classList.add('hidden');
-                document.getElementById('create-group-form').reset();
+        // Global click handler to close pickers if clicking outside
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('#emoji-picker-container') && !event.target.closest('#emoji-button')) {
+                emojiPickerContainer.classList.add('hidden');
             }
-        });
-
-        document.getElementById('add-member-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const newMembersInput = document.getElementById('new-members-input');
-            const newMembers = newMembersInput.value.trim();
-
-            if (!newMembers) { showToast("Please enter at least one username.", 'error'); return; }
-
-            const formInputs = document.querySelectorAll('#add-member-form input, #add-member-form button');
-            formInputs.forEach(el => el.disabled = true);
-
-            const success = await addMembersToGroup(newMembers);
-
-            formInputs.forEach(el => el.disabled = false);
-
-            if (success) {
-                addMemberModal.classList.add('hidden');
-                document.getElementById('add-member-form').reset();
+            if (!event.target.closest('#file-picker-container') && !event.target.closest('#file-button') && !event.target.closest('.file-picker-item')) {
+                filePickerContainer.classList.add('hidden');
             }
         });
 
 
-        // --- Socket.IO Listener (Unchanged) ---
+        // --- SOCKET.IO LISTENERS (Unchanged) ---
+        socket.on('connect', () => {
+            if (currentUsername) {
+                socket.emit('user:set_online', currentUsername);
+            }
+        });
+
         socket.on('users:online:list', (onlineUsernames) => {
             onlineUsernamesList = onlineUsernames;
             fetchRegisteredUsers();
@@ -1508,8 +1507,10 @@ async function uploadFileAndSendMessage(event) {
 
         socket.on('chat:new_message', (data) => {
             if (data.sender === currentRecipient || data.recipient === currentRecipient) {
+                // If in the current chat, refresh the messages
                 fetchMessages();
             } else if (data.recipient === currentUsername) {
+                // If a message for me, update unread count
                 unreadCounts[data.sender] = (unreadCounts[data.sender] || 0) + 1;
                 showToast(`New private message from ${data.sender}!`, 'info', 4000);
                 renderSidebarContent();

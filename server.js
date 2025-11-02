@@ -1202,23 +1202,39 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ----------------------------------------------------
+   // ----------------------------------------------------
     // --- NEW: WebRTC Signaling for Voice/Video Calls (Private) ---
     // ----------------------------------------------------
 
-    // 1. Initiate Call: Sender requests a call
-    socket.on('call:start', (data) => {
+    // 1. Initiate Voice Call: Sender requests a voice call
+    socket.on('call:start_voice', (data) => {
         // Data: { to: recipientUsername, from: senderUsername }
         const { to, from } = data;
         const recipientSocketId = onlineUsers[to];
 
         if (recipientSocketId) {
-            // Emit to recipient that a call is incoming.
-            io.to(recipientSocketId).emit('call:incoming', { from });
-            console.log(`Call started from ${from} to ${to}`);
+            // Emit to recipient that a call is incoming, specifying the type.
+            io.to(recipientSocketId).emit('call:incoming', { from, type: 'voice' });
+            console.log(`Voice call started from ${from} to ${to}`);
         } else {
-            // Optionally, notify the caller if the user is not online
-            io.to(onlineUsers[from]).emit('call:unavailable', { to });
+            // Notify the caller if the user is not online
+            io.to(onlineUsers[from]).emit('call:unavailable', { to, type: 'voice' });
+        }
+    });
+
+    // 1b. Initiate Video Call: Sender requests a video call
+    socket.on('call:start_video', (data) => {
+        // Data: { to: recipientUsername, from: senderUsername }
+        const { to, from } = data;
+        const recipientSocketId = onlineUsers[to];
+
+        if (recipientSocketId) {
+            // Emit to recipient that a call is incoming, specifying the type.
+            io.to(recipientSocketId).emit('call:incoming', { from, type: 'video' });
+            console.log(`Video call started from ${from} to ${to}`);
+        } else {
+            // Notify the caller if the user is not online
+            io.to(onlineUsers[from]).emit('call:unavailable', { to, type: 'video' });
         }
     });
 
