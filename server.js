@@ -9,6 +9,8 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 const multer = require('multer');
+// NEW: Import Helmet for production security headers
+const helmet = require('helmet'); 
 const db = require('./db');
 require('dotenv').config();
 
@@ -128,6 +130,8 @@ const upload = multer({
 
 
 // --- Express Setup ---
+// CRITICAL FOR PRODUCTION: Add Helmet to secure HTTP headers
+app.use(helmet()); 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -1310,6 +1314,15 @@ io.on('connection', (socket) => {
     });
 });
 
+// Production Best Practice: Catch-all Error Handler
+app.use((err, req, res, next) => {
+    console.error(err.stack); // Log the error stack for debugging
+    res.status(500).json({ 
+        success: false, 
+        message: 'Something broke on the server. Please try again.',
+        details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+});
 
 // --- Start Server ---
 server.listen(PORT, () => {
