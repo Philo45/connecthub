@@ -715,49 +715,69 @@
 
 
         async function handleAssistantSubmission(e) {
-            e.preventDefault();
-            const submitBtn = document.getElementById('assistant-submit-btn');
+    e.preventDefault();
+    const submitBtn = document.getElementById('assistant-submit-btn');
+    const loadingHtml = '<i class="fas fa-spinner fa-spin mr-2"></i> Submitting...';
+    const originalHtml = 'Submit';
 
-            const username = document.getElementById('assistant-username').value.trim();
-            const email = document.getElementById('assistant-email').value.trim();
-            const concern = document.getElementById('assistant-concern').value.trim();
+    // 1. Gather data from inputs (using the IDs you provided)
+    const username = document.getElementById('assistant-username').value.trim();
+    const email = document.getElementById('assistant-email').value.trim();
+    // Assuming 'assistant-concern' is the ID for the message input
+    const concern = document.getElementById('assistant-concern').value.trim(); 
 
-            if (!username || !email || !concern) {
-                showMessage('Please ensure all required fields are filled: Username, Email, and Concern.', 'error');
-                return;
-            }
+    if (!username || !email || !concern) {
+        // Assuming showMessage is a function you defined for UI feedback
+        showMessage('Please ensure all required fields are filled: Username, Email, and Concern.', 'error');
+        return;
+    }
 
-            // Disable button and change text while submitting
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Submitting...';
+    // Disable button and change text while submitting
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = loadingHtml;
 
-            try {
-                // Send data to the server endpoint created in server.js
-                const response = await fetch('/api/submit-concern', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, email, concern })
-                });
+    // 2. Map data to Python API's expected payload (receiver and message)
+    const FLASK_API_ENDPOINT = 'https://emailsender-yyz0.onrender.com/api/send-response';
+    
+    const payload = {
+        // Flask expects 'receiver' for the email address
+        "receiver": email, 
+        // Flask expects 'message' to contain the full content
+        "message": `New Inquiry from ConnectHub User:\nUsername: ${username}\nEmail: ${email}\n\nMessage:\n${concern}`
+    };
 
-                const data = await response.json();
+    try {
+        // 3. Send data to the EXTERNAL Python/Flask API endpoint
+        const response = await fetch(FLASK_API_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
 
-                if (response.ok && data.success) {
-                    // Show success screen (Step 4)
-                    currentAssistantStep = 4;
-                    updateAssistantStep();
-                    showMessage('Your concern has been submitted successfully! We will follow up via email.', 'success');
-                } else {
-                    showMessage(data.message || 'Failed to submit concern due to a server error.', 'error');
-                }
-            } catch (error) {
-                showMessage('Network error: Could not reach the server to submit your concern.', 'error');
-                console.error('Assistant Submission Error:', error);
-            } finally {
-                // Re-enable button and reset text
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = 'Submit';
-            }
+        const data = await response.json();
+
+        // Check for HTTP success (200) AND functional success (data.status === 'success')
+        if (response.ok && data.status === 'success') {
+            // Show success screen (Step 4)
+            currentAssistantStep = 4;
+            updateAssistantStep(); // Assuming you have this function to handle UI steps
+            // Show the success message that was previously integrated into the HTML/UI
+            // showMessage('Your concern has been submitted successfully! We will follow up via email.', 'success'); 
+        } else {
+            // Log the error details provided by the Flask API
+            console.error('Flask API Error:', data.details || 'Unknown server error.');
+            showMessage(`Failed to submit concern. The email service reported: ${data.details || 'Server communication error.'}`, 'error');
         }
+    } catch (error) {
+        // This catches network/CORS errors
+        showMessage('Network error: Could not reach the deployed email service. Check API URL and CORS configuration.', 'error');
+        console.error('Assistant Submission Error:', error);
+    } finally {
+        // Re-enable button and reset text
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalHtml;
+    }
+}
         
         // -------------------------------------------------------------------
         // --- Event Listeners & Socket Handlers (EXISTING & NEW) ---
