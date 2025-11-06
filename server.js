@@ -390,6 +390,49 @@ app.get('/reset_form', (req, res) => {
 });
 
 
+
+
+// 🟢 NEW ROUTE: Handle Final Password Reset Submission (Token-based)
+app.post('/api/reset-password', async (req, res) => {
+    const { token, new_password } = req.body;
+
+    if (!token || !new_password) {
+        return res.status(400).json({ success: false, message: 'Token and new password are required.' });
+    }
+
+    try {
+        // 1. Validate Token and Get User
+        const user = await findUserByResetToken(token);
+
+        if (!user) {
+            // Important: Use a generic error message for security.
+            return res.status(400).json({ success: false, message: 'Password reset failed. The link is invalid or expired.' });
+        }
+
+        // 2. Hash the new password using the configured salt rounds
+        const hashedPassword = await bcrypt.hash(new_password, saltRounds);
+
+        // 3. Update the password and clear the token in the database
+        // This function is assumed to handle the password update and token clearance.
+        const success = await resetPassword(user.user_id, hashedPassword);
+
+        if (success) {
+            console.log(`Password successfully reset for user ID: ${user.user_id}`);
+            return res.json({ success: true, message: 'Your password has been reset successfully. You can now log in.' });
+        } else {
+            return res.status(500).json({ success: false, message: 'Failed to update password in the database.' });
+        }
+
+    } catch (error) {
+        console.error('Server error during POST /api/reset-password:', error.message);
+        res.status(500).json({ success: false, message: 'Internal server error during password reset.' });
+    }
+});
+// Route for the actual password reset form (must be served by index.html or a separate page)
+app.get('/reset_form', (req, res) => {
+    // This assumes your frontend (index.html) handles this route and reads the token from the query params
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 // ------------------------------------------
 // --- API Endpoints: AI Chat History (NEW) ---
 // ------------------------------------------
