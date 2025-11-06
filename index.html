@@ -251,8 +251,25 @@
             </div>
         </form>
         
-       <form id="forgot-password-form" class="bg-white p-6 rounded-lg shadow-xl">
-            ...
+       <form id="forgot-password-form" class="bg-white p-6 rounded-lg shadow-xl hidden">
+    <h3 class="text-xl font-semibold mb-4 text-primary">Forgot Password</h3>
+    
+    <p class="mb-4 text-gray-600 text-sm">Enter the email or username associated with your account to receive a verification code.</p>
+
+    <div class="mb-6">
+        <label for="forgot-identifier" class="block text-gray-700 text-sm font-bold mb-2">Username or Email</label>
+        <input type="text" id="forgot-identifier" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary" required>
+    </div>
+
+    <button type="submit" id="forgot-button" class="w-full bg-primary text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-secondary transition duration-200">
+        Send Verification Code
+    </button>
+    
+    <div class="mt-4 text-center">
+        <button type="button" id="toggle-login" class="text-sm text-gray-500 hover:text-gray-700">
+            Back to Login
+        </button>
+    </div>
 </form>
 
 <form id="otp-verification-form" class="bg-white p-6 rounded-lg shadow-xl hidden">
@@ -1144,7 +1161,8 @@
             // Attach event listeners to the modal buttons (using individual IDs for safety)
             document.getElementById('assistant-start-btn').addEventListener('click', nextAssistantStep); // From step 1 to 2
             document.getElementById('assistant-next-btn').addEventListener('click', nextAssistantStep); // From step 2 to 3
-            
+            // Toggle Login Mode (Back to Login from Forgot Form)
+            document.getElementById('toggle-login').addEventListener('click', () => toggleForgotMode(true));
             document.getElementById('assistant-prev-btn').addEventListener('click', prevAssistantStep); // From step 2 to 1
             document.getElementById('assistant-prev-btn-2').addEventListener('click', prevAssistantStep); // From step 3 to 2
 
