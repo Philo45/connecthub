@@ -937,8 +937,8 @@ async function handlePasswordReset(e) {
         const data = await response.json();
 
         // Check for HTTP success (200) AND functional success (data.status === 'success')
-        if (response.ok && data.status === 'success') {
-            // Show success screen (Step 4)
+        if (response.ok && data.success === true) { 
+            // SUCCESS PATH
             currentAssistantStep = 4;
             updateAssistantStep(); // Assuming you have this function to handle UI steps
         } else {
