@@ -291,28 +291,12 @@ async function markPrivateMessagesAsRead(senderId, recipientId) {
 }
 // --- PASSWORD RESET FUNCTIONS ---
 
-// Save the reset token and expiration time for a user's email
-async function setResetToken(email, token, expires) {
-    const [result] = await pool.query(
-        'UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE email = ?',
-        [token, expires, email]
-    );
-    return result.affectedRows;
-}
 
-// Find a user by a valid reset token
-async function findUserByResetToken(token) {
-    const [rows] = await pool.query(
-        'SELECT user_id, username FROM users WHERE reset_token = ? AND reset_token_expires > NOW()',
-        [token]
-    );
-    return rows[0];
-}
 
-// Update a user's password and clear the reset token
+// Update a user's password (OTP verification is assumed complete by caller)
 async function resetPassword(userId, newHashedPassword) {
     const [result] = await pool.query(
-        'UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE user_id = ?',
+        'UPDATE users SET password_hash = ? WHERE user_id = ?',
         [newHashedPassword, userId]
     );
     return result.affectedRows;
@@ -541,8 +525,7 @@ module.exports = {
     markPrivateMessagesAsRead,
 
     // Password Reset
-    setResetToken,
-    findUserByResetToken,
+   
     resetPassword,
 
     // Group Chat
