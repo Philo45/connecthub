@@ -31,8 +31,7 @@ const {
     addReply,
     // PASSWORD RESET FUNCTIONS
     findUserByEmail,
-    setResetToken,
-    findUserByResetToken,
+    findUserByUsername,
     resetPassword,
     getAllUsers,
     // GROUP CHAT FUNCTIONS
@@ -392,40 +391,52 @@ app.get('/reset_form', (req, res) => {
 
 
 
-// 🟢 NEW ROUTE: Handle Final Password Reset Submission (Token-based)
-app.post('/api/reset-password', async (req, res) => {
-    const { token, new_password } = req.body;
 
-    if (!token || !new_password) {
-        return res.status(400).json({ success: false, message: 'Token and new password are required.' });
+// POST /api/reset-password
+// This is the final step that updates the user's password in the database
+app.post('/api/reset-password', async (req, res) => {
+    // 1. Receive identifier, session_id (authorization key), and new password
+    const { identifier, session_id, new_password } = req.body;
+
+    // Check for all three required fields
+    if (!identifier || !new_password || !session_id) {
+        return res.status(400).json({ success: false, message: 'Missing identifier, session ID, or new password.' });
     }
 
-    try {
-        // 1. Validate Token and Get User
-        const user = await findUserByResetToken(token);
+    // You can optionally add a check here to verify the session_id is a valid format 
+    // (e.g., a UUID or 24-char string), though we rely on the frontend for verification.
 
+    let user = null;
+    try {
+        // 2. Find the user by identifier (trying username first, then email)
+        user = await db.findUserByUsername(identifier);
         if (!user) {
-            // Important: Use a generic error message for security.
-            return res.status(400).json({ success: false, message: 'Password reset failed. The link is invalid or expired.' });
+            user = await db.findUserByEmail(identifier);
         }
 
-        // 2. Hash the new password using the configured salt rounds
+        if (!user) {
+            // Use a generic message for security
+            return res.status(404).json({ success: false, message: 'User verification failed or user not found.' });
+        }
+
+        // 3. Hash the new password securely
+        const saltRounds = 10; 
         const hashedPassword = await bcrypt.hash(new_password, saltRounds);
 
-        // 3. Update the password and clear the token in the database
-        // This function is assumed to handle the password update and token clearance.
-        const success = await resetPassword(user.user_id, hashedPassword);
+        // 4. Update the password in the database (db.js is updated to only change password_hash)
+        const success = await db.resetPassword(user.user_id, hashedPassword); 
 
         if (success) {
             console.log(`Password successfully reset for user ID: ${user.user_id}`);
-            return res.json({ success: true, message: 'Your password has been reset successfully. You can now log in.' });
+            // Success response (logs user out and prompts them to log in again)
+            return res.json({ success: true, message: 'Your password has been reset successfully. Please log in.' });
         } else {
             return res.status(500).json({ success: false, message: 'Failed to update password in the database.' });
         }
 
     } catch (error) {
-        console.error('Server error during POST /api/reset-password:', error.message);
-        res.status(500).json({ success: false, message: 'Internal server error during password reset.' });
+        console.error('Database error during POST /api/reset-password:', error);
+        res.status(500).json({ success: false, message: 'Internal server error.' });
     }
 });
 // Route for the actual password reset form (must be served by index.html or a separate page)
