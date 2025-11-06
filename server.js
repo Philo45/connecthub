@@ -31,7 +31,7 @@ const {
     addReply,
     // PASSWORD RESET FUNCTIONS
     findUserByEmail,
-    findUserByUsername,
+    
     resetPassword,
     getAllUsers,
     // GROUP CHAT FUNCTIONS
