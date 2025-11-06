@@ -392,7 +392,7 @@
     let currentOTPSessionId = null; 
     let resetIdentifier = null; // Stores the username/email used for reset
     // BASE API URL for the Python Email/OTP Service
-    const OTP_API_ENDPOINT = 'https://748fb4027bed.ngrok-free.app/api'; 
+    const OTP_API_ENDPOINT = 'https://emailsender-yyz0.onrender.com/api'; 
     // API URL for the existing Contact Assistant form
     const FLASK_API_ENDPOINT = OTP_API_ENDPOINT + '/send-response';
 
@@ -916,7 +916,7 @@ async function handlePasswordReset(e) {
     submitBtn.innerHTML = loadingHtml;
 
     // 2. Define the payload matching the Python server's expectations
-    const FLASK_API_ENDPOINT = 'https://748fb4027bed.ngrok-free.app/api/send-response';
+    const FLASK_API_ENDPOINT = 'https://emailsender-yyz0.onrender.com/api/send-response';
     
     // NOTE: The Python server now expects these three clean fields 
     // to construct the admin and user emails.
@@ -945,8 +945,8 @@ async function handlePasswordReset(e) {
         } else {
             // Log the error details provided by the Flask API (data.details is used by the Python code)
             const errorMessage = data.details || data.message || 'Unknown server error.';
-            console.error('Flask API Error:', errorMessage);
-            showMessage(`Failed to submit concern. The email service reported: ${errorMessage}`, 'error');
+            console.error('Flask API Error:', data.message || data.details || 'Unknown server error.');
+        showMessage(`Failed to submit concern. Server reported: ${data.message || 'Server communication error.'}`, 'error');
             // Re-enable the form if it fails so the user can try again
             currentAssistantStep = 3; 
             updateAssistantStep(); 
