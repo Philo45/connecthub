@@ -744,56 +744,66 @@
 
 
     // Step 3: Handle Final Password Reset Submission
-    async function handlePasswordReset(e) {
-        e.preventDefault();
-        const newPassword = document.getElementById('new-password').value;
-        const confirmPassword = document.getElementById('confirm-password').value;
+    // --- In kk.html (Your Frontend JavaScript) ---
+// Ensure these are globally available/in scope after initial steps:
+// let currentOTPSessionId = null; 
+// let resetIdentifier = null; 
 
-        if (newPassword !== confirmPassword) {
-            showMessage('Passwords do not match.', 'error');
-            return;
-        }
-        // NOTE: This is the FINAL step that should call your MAIN Node.js Backend
-        
-        const resetPasswordButton = document.getElementById('reset-password-button');
-        const originalText = resetPasswordButton.textContent;
-        resetPasswordButton.textContent = 'Resetting...';
-        resetPasswordButton.disabled = true;
+async function handlePasswordReset(e) {
+    e.preventDefault();
+    const newPassword = document.getElementById('new-password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
 
-
-        try {
-            // Call your Node.js backend to update the password in the database
-            const response = await fetch('/api/reset-password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    identifier: resetIdentifier, 
-                    new_password: newPassword
-                })
-            });
-
-            const data = await response.json();
-
-            if (response.ok && data.success) {
-                showMessage('Password successfully reset! Please log in with your new password.', 'success');
-                // Reset state and switch back to login form
-                resetIdentifier = null;
-                currentOTPSessionId = null;
-                toggleForgotMode(true, false, false); 
-            } else {
-                showMessage(data.message || 'Password reset failed on the server.', 'error');
-            }
-
-        } catch (error) {
-            showMessage('Network error: Could not complete password reset.', 'error');
-        } finally {
-            resetPasswordButton.textContent = originalText;
-            resetPasswordButton.disabled = false;
-        }
+    if (newPassword !== confirmPassword) {
+        showMessage('Passwords do not match.', 'error');
+        return;
     }
+    
+    // CRITICAL: Ensure the session ID and identifier are present
+    if (!currentOTPSessionId || !resetIdentifier) {
+         showMessage('Verification session expired or incomplete. Please restart the process.', 'error');
+         return;
+    }
+    
+    const resetPasswordButton = document.getElementById('reset-password-button');
+    const originalText = resetPasswordButton.textContent;
+    resetPasswordButton.textContent = 'Resetting...';
+    resetPasswordButton.disabled = true;
 
+    try {
+        // Call the Node.js backend to update the password
+        const response = await fetch('/api/reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                // 1. User's identifier (username or email)
+                identifier: resetIdentifier, 
+                // 2. Verified session ID (used as authorization key)
+                session_id: currentOTPSessionId, 
+                new_password: newPassword
+            })
+        });
 
-   
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            showMessage(data.message || 'Password reset successful. Please log in.', 'success');
+            // Hide the password reset form and show the login form
+            document.getElementById('password-reset-form').classList.add('hidden');
+            document.getElementById('login-form').classList.remove('hidden');
+        } else {
+            // Handle 400 or 404 errors from the server
+            showMessage(data.message || 'Password reset failed. Please try again.', 'error');
+        }
+        
+    } catch (error) {
+        console.error('Password reset network error:', error);
+        showMessage('Network error during password reset.', 'error');
+    } finally {
+        resetPasswordButton.textContent = originalText;
+        resetPasswordButton.disabled = false;
+    }
+}
         // -------------------------------------------------------------------
         // --- Virtual Assistant Functions (NEW) ---
         // -------------------------------------------------------------------
