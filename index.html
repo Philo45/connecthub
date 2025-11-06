@@ -896,13 +896,13 @@ async function handlePasswordReset(e) {
         async function handleAssistantSubmission(e) {
     e.preventDefault();
     const submitBtn = document.getElementById('assistant-submit-btn');
-    const loadingHtml = '<i class="fas fa-spinner fa-spin mr-2"></i> Submitting...';
+    // Using Font Awesome for the spinner requires the CDN link in your <head>
+    const loadingHtml = '<i class="fas fa-spinner fa-spin mr-2"></i> Submitting...'; 
     const originalHtml = 'Submit';
 
-    // 1. Gather data from inputs (using the IDs you provided)
+    // 1. Gather data from inputs
     const username = document.getElementById('assistant-username').value.trim();
     const email = document.getElementById('assistant-email').value.trim();
-    // Assuming 'assistant-concern' is the ID for the message input
     const concern = document.getElementById('assistant-concern').value.trim(); 
 
     if (!username || !email || !concern) {
@@ -915,14 +915,15 @@ async function handlePasswordReset(e) {
     submitBtn.disabled = true;
     submitBtn.innerHTML = loadingHtml;
 
-    // 2. Map data to Python API's expected payload (receiver and message)
+    // 2. Define the payload matching the Python server's expectations
     const FLASK_API_ENDPOINT = 'https://748fb4027bed.ngrok-free.app/api/send-response';
     
+    // NOTE: The Python server now expects these three clean fields 
+    // to construct the admin and user emails.
     const payload = {
-        // Flask expects 'receiver' for the email address
-        "receiver": email, 
-        // Flask expects 'message' to contain the full content
-        "message": `New Inquiry from ConnectHub User:\nUsername: ${username}\nEmail: ${email}\n\nMessage:\n${concern}`
+        "username": username,
+        "receiver": email, // User's email address
+        "message": concern // User's actual concern/message
     };
 
     try {
@@ -940,24 +941,25 @@ async function handlePasswordReset(e) {
             // Show success screen (Step 4)
             currentAssistantStep = 4;
             updateAssistantStep(); // Assuming you have this function to handle UI steps
-            // Show the success message that was previously integrated into the HTML/UI
-            // showMessage('Your concern has been submitted successfully! We will follow up via email.', 'success'); 
         } else {
-            // Log the error details provided by the Flask API
-            console.error('Flask API Error:', data.details || 'Unknown server error.');
-            showMessage(`Failed to submit concern. The email service reported: ${data.details || 'Server communication error.'}`, 'error');
+            // Log the error details provided by the Flask API (data.details is used by the Python code)
+            const errorMessage = data.details || data.message || 'Unknown server error.';
+            console.error('Flask API Error:', errorMessage);
+            showMessage(`Failed to submit concern. The email service reported: ${errorMessage}`, 'error');
+            // Re-enable the form if it fails so the user can try again
+            currentAssistantStep = 3; 
+            updateAssistantStep(); 
         }
     } catch (error) {
         // This catches network/CORS errors
-        showMessage('Network error: Could not reach the deployed email service. Check API URL and CORS configuration.', 'error');
+        showMessage('Network error: Could not reach the deployed service. Please try again.', 'error');
         console.error('Assistant Submission Error:', error);
     } finally {
         // Re-enable button and reset text
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalHtml;
     }
-}
-        
+}  
         // -------------------------------------------------------------------
         // --- Event Listeners & Socket Handlers (EXISTING & NEW) ---
         // -------------------------------------------------------------------
