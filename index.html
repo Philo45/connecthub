@@ -941,6 +941,7 @@ async function handlePasswordReset(e) {
             // SUCCESS PATH
             currentAssistantStep = 4;
             updateAssistantStep(); // Assuming you have this function to handle UI steps
+            console.log('Flask API Success:', data.message);
         } else {
             // Log the error details provided by the Flask API (data.details is used by the Python code)
             const errorMessage = data.details || data.message || 'Unknown server error.';
